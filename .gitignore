@@ -1,0 +1,10 @@
+data/
+result/
+sample_code/
+config/
+images/
+logs/
+*.swp
+others/
+*.pkl
+*.pyc
