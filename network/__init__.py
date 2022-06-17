@@ -25,6 +25,8 @@ from .md_recon import MRIReconstruction as mdr
 
 from .convTranNet_0601 import convTranNet_0601, convTranNet_0601_debug, convTranNet_0601_var1, convTranNet_0601_debug2
 
+from .convTranNet_0617 import convTranNet_0617 
+
 
 def getScheduler(optimizer, config):
 
@@ -225,6 +227,8 @@ def getNet(netType):
     elif (netType == 'convTranNet_0601_debug2'):
         return convTranNet_0601_debug2(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
 
+    elif (netType == 'convTranNet_0617'):
+        return convTranNet_0617(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
 
     else:
         assert False,"Wrong net type"

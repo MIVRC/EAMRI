@@ -808,14 +808,14 @@ def getDataloader(dataName, dataMode, batch_size, center_fractions, acceleration
         dataset=train_data,
         batch_size=batch_size,
         shuffle=True,
-        num_workers=8,
+        num_workers=4,
         pin_memory=True,
     )
     if dataName != 'cardiac':
         dev_loader = DataLoader(
             dataset=dev_data,
             batch_size=batch_size,
-            num_workers=8,
+            num_workers=4,
             pin_memory=True,
         )
     else:

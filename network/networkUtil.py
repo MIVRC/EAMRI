@@ -742,9 +742,7 @@ class DAM1(nn.Module):
         x1 = self.inConv(x) #[16,16,3,3]
         x2 = self.denseConv(x1) #(8,64,256,256)
         x2 = self.transitionLayer(x2) #(8,32,256,256)
-        
         xout = self.outConv(x2) + x1 #(8,16,256,256)
-
         return xout
 
 
@@ -753,7 +751,17 @@ class DAM(nn.Module):
     '''
     basic DAM module 
     '''
-    def __init__(self, inChannel = 2, fNum = 16, growthRate = 16, layer = 3, dilate = False, activation = 'ReLU', useOri = False, transition = 0, residual = True):
+    def __init__(self, inChannel = 2, 
+                        fNum = 16, 
+                        growthRate = 16, 
+                        layer = 3, 
+                        dilate = False, 
+                        activation = 'ReLU', 
+                        useOri = False, 
+                        transition = 0, 
+                        residual = True):
+
+
         super(DAM, self).__init__()
         self.inChannel = inChannel
         self.outChannel = inChannel
@@ -761,10 +769,13 @@ class DAM(nn.Module):
         self.residual = residual
 
         self.inConv = nn.Conv2d(self.inChannel, fNum, 3, padding = 1) # (16,2,3,3)
+
         if(activation == 'LeakyReLU'):
             self.activ = nn.LeakyReLU()
         elif(activation == 'ReLU'):
             self.activ = nn.ReLU()
+        elif(activation == 'GELU'):
+            self.activ = nn.GELU()
 
         self.denseConv = denseConv(inChannel=fNum, \
                                     kernelSize=3,\

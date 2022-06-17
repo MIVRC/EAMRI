@@ -1,7 +1,7 @@
 "sample code for fastmri training and evaluating"
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 import sys
 import time
 import cv2
