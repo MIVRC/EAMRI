@@ -1,6 +1,5 @@
 """
 modified at 09/06/22
-
 """
 
 
@@ -466,9 +465,8 @@ class attFuse_0617_var2(nn.Module):
 
         super(attFuse_0617_var2, self).__init__()
 
-        self.imhead = attHead(C, 2 * C2)
-        self.ehead = attHead(C1, C2)
-
+        self.imhead = attHead(C, C2)
+        self.ehead = attHead(C1, 2* C2)
         self.num_heads = num_heads
         
         self.a1 = nn.Parameter(torch.ones(num_heads, 1, 1))
@@ -485,24 +483,24 @@ class attFuse_0617_var2(nn.Module):
         """
         _, _, H, W = x.shape    
 
-        q1 = self.imhead(x) #(B, 2 * C2, H, W)
-        k_eg = self.ehead(e) #(B, C2, H, W)
+        q_im = self.imhead(x) #(B, C2, H, W)
+        e1 = self.ehead(e) #(B,2 * C2, H, W)
 
         # split into q, k, v 
-        q_im, v_im = q1.chunk(2, dim=1)
+        k_eg, v_eg = e1.chunk(2, dim=1)
 
         # reshape
         q_im = rearrange(q_im, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-        v_im = rearrange(v_im, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
         k_eg = rearrange(k_eg, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
+        v_eg = rearrange(v_eg, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
 
         q_im = torch.nn.functional.normalize(q_im, dim=-1)
         k_eg = torch.nn.functional.normalize(k_eg, dim=-1)
         
         attn = (q_im @ k_eg.transpose(-2, -1)) * self.a1
-        attn = attn1.softmax(dim=-1)
+        attn = attn.softmax(dim=-1)
 
-        out = (attn @ v_im)
+        out = (attn @ v_eg)
         out = rearrange(out, 'b head c (h w) -> b (head c) h w', head=self.num_heads, h=H, w=W)
 
         out = self.project_out(out) #(B, C, H, W)
@@ -550,7 +548,7 @@ class ori_attFuse(nn.Module):
         k_im = torch.nn.functional.normalize(k_im, dim=-1)
         
         attn = (q_im @ k_im.transpose(-2, -1)) * self.a1
-        attn = attn1.softmax(dim=-1)
+        attn = attn.softmax(dim=-1)
 
         out = (attn @ v_im)
         out = rearrange(out, 'b head c (h w) -> b (head c) h w', head=self.num_heads, h=H, w=W)
@@ -561,19 +559,21 @@ class ori_attFuse(nn.Module):
         return xout #(B, C, H, W)
 
 
-def attBlock(nn.Module):
+class attBlock(nn.Module):
     def __init__(self, C, C1, C2, num_heads, bias):
+        super(attBlock, self).__init__()
         self.b1 = ori_attFuse(C, C2, num_heads, bias) 
         self.b2 = attFuse_0617_var2(C, C1, C2, num_heads, bias) 
-
 
     def forward(self, x, e):
 
         # self.mhsa
+
+        x1 = self.b2(x, e)
+        
         x1 = self.b1(x)
 
         # edge enhance
-        x1 = self.b2(x1, e)
 
         return x1
 

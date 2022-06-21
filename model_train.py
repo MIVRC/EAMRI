@@ -1,6 +1,7 @@
 "sample code for fastmri training and evaluating"
 
 import os
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 import sys
 import time
 import cv2
@@ -106,7 +107,6 @@ def train_epoch_edge(args, epoch, model, data_loader, optimizer, logger):
 
         #zim_edge = torch.unsqueeze(zim_edge, 1).contiguous() # dev
 
-        # sent to device
         input = input.to(args.device, dtype=torch.float)
         gt = gt.to(args.device, dtype=torch.float)
         zim_edge = zim_edge.to(args.device, dtype=torch.float)
@@ -385,6 +385,7 @@ def visualize_edge(args, model, data_loader):
                     plt.imsave(os.path.join(args.im_root, '{}-{}_e4.png'.format(fname[idx].split('.')[0], slice[idx])), e4_np[idx], cmap='gray' )
                     plt.imsave(os.path.join(args.im_root, '{}-{}_pred.png'.format(fname[idx].split('.')[0], slice[idx])), pred_np[idx], cmap='gray' )
                     plt.imsave(os.path.join(args.im_root, '{}-{}_zf.png'.format(fname[idx].split('.')[0], slice[idx])), input_np[idx], cmap='gray' )
+                    
                     #plt.imsave(os.path.join(args.im_root, '{}-{}_res.png'.format(fname[idx].split('.')[0], slice[idx])), res_np[idx], cmap='viridis')
                     #plt.imsave(os.path.join(args.im_root, '{}-{}_zim_res.png'.format(fname[idx].split('.')[0], slice[idx])), zim_res_np[idx], cmap='viridis')
                     #plt.imsave(os.path.join(args.im_root, '{}-{}_mask.png'.format(fname[idx].split('.')[0], slice[idx])), temp[idx,:,:,0], cmap='gray')
@@ -524,8 +525,9 @@ if __name__ == '__main__':
             args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/' 
 
         elif args.dataName == 'cc359':
-            args.train_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Train/' 
-            args.valid_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Val/' 
+            args.train_root = '/home/ET/hanhui/opendata/CC-359_single_coil/Train/' 
+            args.valid_root = '/home/ET/hanhui/opendata/CC-359_single_coil/Val/' 
+
 
     elif args.challenge == 'multicoil':
         if args.dataName == 'fastmri':
@@ -539,4 +541,10 @@ if __name__ == '__main__':
 
     main(args, is_evaluate=0)
     
+    '''
+    elif args.dataName == 'cc359':
+        args.train_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Train/' 
+        args.valid_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Val/' 
+    '''
+
 
