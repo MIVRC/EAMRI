@@ -1,7 +1,7 @@
 "sample code for fastmri training and evaluating"
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+#os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 import sys
 import time
 import cv2
@@ -482,8 +482,8 @@ def create_arg_parser_fastmri():
     parser = argparse.ArgumentParser()
     parser.add_argument('--seed', type=int, default=43) 
     parser.add_argument('--dev', type=int, default=0, help='for development test') 
-    parser.add_argument('--train_root', type=str, help='path to store the train data', default='/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_train/')
-    parser.add_argument('--valid_root', type=str, help='path to store the train data', default='/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/')
+    parser.add_argument('--train_root', type=str, help='path to store the train data') 
+    parser.add_argument('--valid_root', type=str, help='path to store the train data')
     parser.add_argument('--dataName', type=str, help='name of the dataset. fastmri/cc359', default='fastmri')
     parser.add_argument('--challenge', type=str, help='challenge. singlecoil/multicoil', default='singlecoil')
     parser.add_argument('--dataMode', type=str, help="data mode for input data, real/complex", default='complex') 
@@ -513,21 +513,20 @@ def create_arg_parser_fastmri():
 
 
 if __name__ == '__main__':
+    
     args = create_arg_parser_fastmri()
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
 
-    # dev
     if args.challenge == 'singlecoil':
         if args.dataName == 'fastmri':
             args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_train/' 
             args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/' 
 
         elif args.dataName == 'cc359':
-            args.train_root = '/home/ET/hanhui/opendata/CC-359_single_coil/Train/' 
-            args.valid_root = '/home/ET/hanhui/opendata/CC-359_single_coil/Val/' 
-
+            args.train_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Train/' 
+            args.valid_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Val/' 
 
     elif args.challenge == 'multicoil':
         if args.dataName == 'fastmri':
@@ -541,10 +540,4 @@ if __name__ == '__main__':
 
     main(args, is_evaluate=0)
     
-    '''
-    elif args.dataName == 'cc359':
-        args.train_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Train/' 
-        args.valid_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Val/' 
-    '''
-
 

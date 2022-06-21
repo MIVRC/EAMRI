@@ -25,7 +25,13 @@ from .md_recon import MRIReconstruction as mdr
 
 #from .convTranNet_0601 import convTranNet_0601, convTranNet_0601_debug, convTranNet_0601_var1, convTranNet_0601_debug2
 
-from .net_0617 import net_0617, net_0617_var1, net_0617_var2
+from .net_0621 import net_0621
+from .net_0621_var1 import net_0621_var1
+from .net_0621_var2 import net_0621_var2
+from .net_0621_var3 import net_0621_var3
+from .net_0621_var4 import net_0621_var4
+
+
 
 
 def getScheduler(optimizer, config):
@@ -217,8 +223,8 @@ def getNet(netType):
         return convTranNet_0601(img_size=320, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=True)
 
 
-    elif (netType == 'convTranNet_0601_var1'):
-        return convTranNet_0601_var1(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
+    elif (netType == 'net_0601_var1'):
+        return net_0601_var1(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
 
     elif (netType == 'convTranNet_0601_debug'):
         return convTranNet_0601_debug(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
@@ -238,6 +244,20 @@ def getNet(netType):
     elif (netType == 'net_0617_var2'):
         return net_0617_var2(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
 
+    elif (netType == 'net_0621'):
+        return net_0621(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+
+    elif (netType == 'net_0621_var1'):
+        return net_0621_var1(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+
+    elif (netType == 'net_0621_var2'):
+        return net_0621_var2(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+
+    elif (netType == 'net_0621_var3'):
+        return net_0621_var3(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+
+    elif (netType == 'net_0621_var4'):
+        return net_0621_var4(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
     else:
         assert False,"Wrong net type"
 
