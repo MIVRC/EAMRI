@@ -175,8 +175,8 @@ class attFuse_0601(nn.Module):
 
         xe = torch.cat([x, e], dim=1) #(B, C+C1, H, W)
         xe = self.conv1(xe) #(B, C2, H, W)
+        
         qkv = self.imhead(xe) #(B, 3*C2, H, W)
-
         q, k, v = qkv.chunk(3, dim=1)
    
         q = rearrange(q, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
@@ -514,6 +514,7 @@ class convTranNet_0601_debug2(nn.Module):
 class convTranNet_0601_var1(nn.Module):
     """
     12 DAM + transformer block
+    no edge fuse
     """
     def __init__(self, img_size=320, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False): 
         """
