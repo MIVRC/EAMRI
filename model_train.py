@@ -538,6 +538,6 @@ if __name__ == '__main__':
     elif args.accer == 8:
         args.center_fractions = 0.04
 
-    main(args, is_evaluate=0)
+    main(args, is_evaluate=1)
     
 

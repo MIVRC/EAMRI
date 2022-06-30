@@ -809,6 +809,64 @@ class DAM(nn.Module):
         return x2
 
 
+class DAM2(nn.Module):
+    '''
+    basic DAM module 
+    '''
+    def __init__(self, inChannel = 2, 
+                        fNum = 16, 
+                        stride = 2,
+                        padding = 1, 
+                        growthRate = 16, 
+                        layer = 3, 
+                        dilate = False, 
+                        activation = 'ReLU', 
+                        useOri = False, 
+                        transition = 0.5):
+
+
+        super(DAM2, self).__init__()
+        self.inChannel = inChannel
+        self.outChannel = inChannel
+        self.transition = transition
+
+        self.inConv = nn.Conv2d(inChannel, fNum, 3, stride=stride, padding = padding) # (16,2,3,3)
+
+        self.activ = nn.ReLU()
+
+        self.denseConv = denseConv(inChannel=fNum, \
+                                    kernelSize=3,\
+                                    growthRate=growthRate, \
+                                    layer = layer - 2, \
+                                    dilationLayer = dilate,\
+                                    activ = activation, \
+                                    useOri = useOri)
+       
+
+        if(transition>0):
+            self.transitionLayer = transitionLayer(inChannel=fNum+growthRate*(layer-2), \
+                                                    compressionRate = transition, \
+                                                    activ = activation)
+
+            self.outConv = nn.ConvTranspose2d(int((fNum+growthRate*(layer-2))*transition), \
+                                            self.outChannel, \
+                                            kernel_size=4, \
+                                            stride=stride, \
+                                            padding=padding)
+
+
+    def forward(self, x):
+
+        x2 = self.inConv(x) #[8,16,128,128]
+        x2 = self.denseConv(x2) #(8,64,128,128)
+        x2 = self.transitionLayer(x2) #(8,32,128,128)
+        x2 = self.outConv(x2) #(8,2,256,256)
+        x2 = x2+x[:,:self.outChannel]
+
+        return x2
+
+
+
 
 
 
@@ -973,15 +1031,14 @@ class transitionLayer(nn.Module):
         
         return y
 
+
+
 class convLayer(nn.Module):
     def __init__(self, inChannel = 64, outChannel = 64, activ = 'ReLU', kernelSize = 3):
         super(convLayer, self).__init__()
         self.bn = nn.BatchNorm2d(inChannel)
         pad = int((kernelSize-1)/2)
-        if(activ == 'LeakyReLU'):
-            self.relu = nn.LeakyReLU()
-        else:
-            self.relu = nn.ReLU()
+        self.relu = nn.ReLU()
         self.conv = nn.Conv2d(inChannel,outChannel,kernelSize,padding = pad)
         
     def forward(self,x):

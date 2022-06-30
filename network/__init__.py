@@ -26,12 +26,15 @@ from .md_recon import MRIReconstruction as mdr
 #from .convTranNet_0601 import convTranNet_0601, convTranNet_0601_debug, convTranNet_0601_var1, convTranNet_0601_debug2
 
 from .net_0621 import net_0621
-from .net_0621_var1 import net_0621_var1
-from .net_0621_var2 import net_0621_var2
-from .net_0621_var3 import net_0621_var3
-from .net_0621_var4 import net_0621_var4
+#from .net_0621_var1 import net_0621_var1
+#from .net_0621_var2 import net_0621_var2
+#from .net_0621_var3 import net_0621_var3
+#from .net_0621_var4 import net_0621_var4
 
+from .net_0622 import net_0622
+from .net_0622_var1 import net_0622_var1
 
+from .net_0626 import net_0626
 
 
 def getScheduler(optimizer, config):
@@ -244,6 +247,8 @@ def getNet(netType):
     elif (netType == 'net_0617_var2'):
         return net_0617_var2(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
 
+
+    # =========================================================
     elif (netType == 'net_0621'):
         return net_0621(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
 
@@ -258,6 +263,20 @@ def getNet(netType):
 
     elif (netType == 'net_0621_var4'):
         return net_0621_var4(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+
+
+    # =========================================================
+    elif (netType == 'net_0622'):
+        return net_0622(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=1, isFastmri=False)
+
+    elif (netType == 'net_0622_var1'):
+        return net_0622_var1(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=1, isFastmri=False)
+
+    # =========================================================
+    elif (netType == 'net_0626'):
+        return net_0626(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+
+
     else:
         assert False,"Wrong net type"
 
