@@ -33,8 +33,11 @@ from .net_0621 import net_0621
 
 from .net_0622 import net_0622
 from .net_0622_var1 import net_0622_var1
-
 from .net_0626 import net_0626
+
+from .net_0702 import net_0702
+from .net_0702_var1 import net_0702_var1
+from .net_0702_var2 import net_0702_var2
 
 
 def getScheduler(optimizer, config):
@@ -277,6 +280,17 @@ def getNet(netType):
         return net_0626(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
 
 
+    # =========================================================
+    elif (netType == 'net_0702'):
+        return net_0702(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+
+    elif (netType == 'net_0702_var1'):
+        return net_0702_var1(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+
+    elif (netType == 'net_0702_var2'):
+        return net_0702_var2(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+
+    # =========================================================
     else:
         assert False,"Wrong net type"
 

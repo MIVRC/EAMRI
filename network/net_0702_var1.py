@@ -128,7 +128,7 @@ class edgeBlock(nn.Module):
 
         return (x1,x2)
 
-#============================== #============================== #============================== #============================== #============================== #==============================
+#============================== #============================== #============================== #============================== 
 
 class attHead(nn.Module):
     """
@@ -145,7 +145,6 @@ class attHead(nn.Module):
         self.norm = LayerNorm(C, layernorm_type)
         self.conv1 = nn.Conv2d(C, C1, kernel_size=1, bias=bias) 
         self.conv2 = nn.Conv2d(C1, C1, kernel_size=3, stride=1, padding=1, groups=C1, bias=bias)
-        self.isNorm = norm
 
     def forward(self, x):
         """
@@ -155,6 +154,33 @@ class attHead(nn.Module):
         x1 = self.conv1(x) # (B, C1, H, W)
         x1 = self.conv2(x1)  #(B, C1, H, W)
         return x1
+
+
+class attHead1(nn.Module):
+    """
+    norm + 3*3 dconv
+    """
+    
+    def __init__(self, C, C1, layernorm_type= 'BiasFree', bias=False):
+        """
+        C: input channel 
+        C1: output channel after 1*1 conv
+
+        """
+        super(attHead1,self).__init__()
+        self.norm = LayerNorm(C, layernorm_type)
+        self.conv = nn.Conv2d(C, C1, kernel_size=3, stride=1, padding=1, groups=C1, bias=bias)
+
+    def forward(self, x):
+        """
+        x: (B, C, H, W)
+        """ 
+        x1 = self.norm(x) #(B, H, W, C)
+        x1 = self.conv(x1)  #(B, C1, H, W)
+
+        return x1
+
+
 
 
 
@@ -170,7 +196,7 @@ class EEM(nn.Module):
         super(EEM, self).__init__()
 
         self.imhead = attHead(C, 2 * C2)
-        self.ehead = attHead(C1, C2)
+        self.ehead = attHead1(C1, C2)
         self.num_heads = num_heads
         self.a1 = nn.Parameter(torch.ones(num_heads, 1, 1))
 
@@ -185,8 +211,8 @@ class EEM(nn.Module):
         """
         _, _, H, W = x.shape    
 
-        q1 = self.imhead(x) #(B, C2, H, W)
-        k_eg = self.ehead(e) #(B,2 * C2, H, W)
+        q1 = self.imhead(x) #(B, 2*C2, H, W)
+        k_eg = self.ehead(e) #(B, C2, H, W)
 
         # split into q, k, v 
         q_im, v_im = q1.chunk(2, dim=1)
@@ -262,23 +288,26 @@ class IEM(nn.Module):
 
 
 class attBlock(nn.Module):
-    def __init__(self, C, C1, C2, num_heads, bias):
+    def __init__(self, C, C1, C2, num_heads, bias, isFastmri):
         super(attBlock, self).__init__()
         
         self.b1 = EEM(C, C1, C2, num_heads, bias) 
         self.b2 = IEM(C, C2, num_heads, bias) 
+        self.dc = dataConsistencyLayer_fastmri(isFastmri=isFastmri)
 
-    def forward(self, x, e):
+    def forward(self, x, e, y, m):
 
-        # self.mhsa
+        # self.mhsa + 2dc
 
         x1 = self.b1(x, e)
+        x1 = self.dc(x1, y, m)
         x1 = self.b2(x1)
-
+        x1 = self.dc(x1, y, m)
+        
         return x1
 
 
-class net_0626(nn.Module):
+class net_0702_var1(nn.Module):
     """
     12 DAM + transformer block
     """
@@ -291,7 +320,7 @@ class net_0626(nn.Module):
             n_RDB: number of RDBs 
 
         """
-        super(net_0626, self).__init__()
+        super(net_0702_var1, self).__init__()
         
         # image module
         self.net1 = im_extractor(isFastmri=isFastmri, n_DAM=n_DAM)
@@ -299,16 +328,17 @@ class net_0626(nn.Module):
         self.net3 = im_extractor(isFastmri=isFastmri, n_DAM=n_DAM)
         self.net4 = im_extractor(isFastmri=isFastmri, n_DAM=n_DAM)
 
+        self.dc = dataConsistencyLayer_fastmri(isFastmri=isFastmri)
+        
         # edge module
         self.edgeNet = edgeBlock(inFeat=2, outFeat=edgeFeat) # simple edge block
 
         # fuse module
-        self.fuse1 = attBlock(indim, edgeFeat, outdim, num_head, bias=False) 
-        self.fuse2 = attBlock(indim, edgeFeat, outdim, num_head, bias=False) 
-        self.fuse3 = attBlock(indim, edgeFeat, outdim, num_head, bias=False) 
-        self.fuse4 = attBlock(indim, edgeFeat, outdim, num_head, bias=False) 
+        self.fuse1 = attBlock(indim, edgeFeat, outdim, num_head, bias=False, isFastmri=isFastmri) 
+        self.fuse2 = attBlock(indim, edgeFeat, outdim, num_head, bias=False, isFastmri=isFastmri) 
+        self.fuse3 = attBlock(indim, edgeFeat, outdim, num_head, bias=False, isFastmri=isFastmri) 
+        self.fuse4 = attBlock(indim, edgeFeat, outdim, num_head, bias=False, isFastmri=isFastmri) 
         
-        self.dc = dataConsistencyLayer_fastmri(isFastmri=isFastmri)
 
     def forward(self, x1, _, y, m): # (image, kspace, mask)
         """
@@ -327,20 +357,17 @@ class net_0626(nn.Module):
         # second stage
         x2 = self.net2(x1, y, m) #(B, 2, H, W)
         (e2, e2_d) = self.edgeNet(x1) 
-        x1 = self.fuse2(x2, e2)
-        x1 = self.dc(x1,y,m)
+        x1 = self.fuse2(x2, e2, y, m)
 
         # third stage
         x2 = self.net3(x1, y, m) #(B, 2, H, W)
         (e3, e3_d) = self.edgeNet(x1) 
-        x1 = self.fuse3(x2, e3)
-        x1 = self.dc(x1,y,m)
+        x1 = self.fuse3(x2, e3, y, m)
 
         # fourth stage
         x2 = self.net4(x1, y, m) #(B, 2, H, W)
         (e4, e4_d) = self.edgeNet(x1) 
-        x1 = self.fuse4(x2, e4)
-        x1 = self.dc(x1,y,m)
+        x1 = self.fuse4(x2, e4, y, m)
 
         return (e2_d,e3_d,e4_d,x1)
 

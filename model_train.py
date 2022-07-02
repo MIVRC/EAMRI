@@ -310,7 +310,7 @@ def visualize_edge(args, model, data_loader):
                 std = std.unsqueeze(1).unsqueeze(2).to(args.device, dtype=torch.float)
                
                 outputs = model(input, zim_edge, subF, mask_var)
-
+                
                 e1 = fastmri_format(outputs[0])
                 e2 = fastmri_format(outputs[1])
                 e3 = fastmri_format(outputs[2])
@@ -395,7 +395,7 @@ def visualize_edge(args, model, data_loader):
 
 
 
-def main(args, is_evaluate=0):
+def main(args):
 
     # create folder
     args.exp_dir.mkdir(parents=True, exist_ok=True)
@@ -403,9 +403,13 @@ def main(args, is_evaluate=0):
     if not os.path.exists(args.im_root):
         os.mkdir(args.im_root)
 
-    if (args.resume == 1) or (is_evaluate == 1): 
+    if (args.resume == 1) or (args.is_evaluate == 1): 
+
+        if args.resume == 1: # safeguard
+            args.is_evaluate = 0
+
         logger = create_logger(args, 'a')
-        logger.debug("loading model. Resume: {}, Evaluate: {}".format(args.resume, is_evaluate))
+        logger.debug("loading model. Resume: {}, Evaluate: {}".format(args.resume, args.is_evaluate))
 
         if 'wasnet' in args.netType or 'edge' in args.netType:
             checkpoint, model, optimizer = load_model(args, os.path.join(args.exp_dir, 'best_model.pt'))
@@ -438,7 +442,7 @@ def main(args, is_evaluate=0):
 
     # ====================================
     # training mode
-    if not is_evaluate:
+    if not args.is_evaluate:
         logger.debug("start training")
         for epoch in range(start_epoch, args.num_epochs):
             scheduler.step(epoch)
@@ -500,6 +504,7 @@ def create_arg_parser_fastmri():
     parser.add_argument('--report_interval', type=int, default=100) 
     parser.add_argument('--display_interval', type=int, default=10) 
     parser.add_argument('--resume', type=int, default=0, help="resume training") 
+    parser.add_argument('--is_evaluate', type=int, default=0, help="train or test") 
     parser.add_argument('--lr-gamma', type=float, default=0.1,
                         help='Multiplicative factor of learning rate decay')
     parser.add_argument('--weight-decay', type=float, default=0.,
@@ -508,6 +513,8 @@ def create_arg_parser_fastmri():
                         help='If set, use multiple GPUs using data parallelism')
     parser.add_argument('--device', type=str, default='cuda',
                         help='Which device to train on. Set to "cuda" to use the GPU')
+
+    parser.add_argument('--server', type=str, default='cluster', help='Which device to train on.')
 
     return parser.parse_args()
 
@@ -518,26 +525,44 @@ if __name__ == '__main__':
     random.seed(args.seed)
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
+    
+    if args.server == 'cluster':
+        if args.challenge == 'singlecoil':
+            if args.dataName == 'fastmri':
+                args.train_root = '/project/Math/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_train/' 
+                args.valid_root = '/project/Math/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/' 
 
-    if args.challenge == 'singlecoil':
-        if args.dataName == 'fastmri':
-            args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_train/' 
-            args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/' 
+            elif args.dataName == 'cc359':
+                args.train_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Train/' 
+                args.valid_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Val/' 
 
-        elif args.dataName == 'cc359':
-            args.train_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Train/' 
-            args.valid_root = '/project/Math/hanhui/opendata/CC-359_single_coil/Val/' 
+        elif args.challenge == 'multicoil':
+            if args.dataName == 'fastmri':
+                args.train_root = '/project/Math/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train/' 
+                args.valid_root = '/project/Math/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val/' 
 
-    elif args.challenge == 'multicoil':
-        if args.dataName == 'fastmri':
-            args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train/' 
+    elif args.server == 'ai':
+            if args.dataName == 'fastmri':
+                args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_train/' 
+                args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/' 
+
+            elif args.dataName == 'cc359':
+                args.train_root = '/home/ET/hanhui/opendata/CC-359_single_coil/Train/' 
+                args.valid_root = '/home/ET/hanhui/opendata/CC-359_single_coil/Val/' 
+
+        elif args.challenge == 'multicoil':
+            if args.dataName == 'fastmri':
+                args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train/' 
             args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val/' 
+
+
 
     if args.accer == 4:
         args.center_fractions = 0.08
     elif args.accer == 8:
         args.center_fractions = 0.04
 
-    main(args, is_evaluate=1)
+
+    main(args)
     
 
