@@ -1,7 +1,7 @@
 "sample code for fastmri training and evaluating"
 
 import os
-#os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+os.environ["CUDA_VISIBLE_DEVICES"] = "4"
 import sys
 import time
 import cv2
@@ -541,7 +541,9 @@ if __name__ == '__main__':
                 args.train_root = '/project/Math/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train/' 
                 args.valid_root = '/project/Math/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val/' 
 
+
     elif args.server == 'ai':
+        if args.challenge == 'singlecoil':
             if args.dataName == 'fastmri':
                 args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_train/' 
                 args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/' 
@@ -553,7 +555,8 @@ if __name__ == '__main__':
         elif args.challenge == 'multicoil':
             if args.dataName == 'fastmri':
                 args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train/' 
-            args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val/' 
+                args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val/' 
+
 
 
 

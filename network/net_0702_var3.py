@@ -194,16 +194,19 @@ class EEM(nn.Module):
 
         super(EEM, self).__init__()
 
-        self.imhead = attHead(C, 3 * C2)
+        self.imhead = attHead(C, 2 * C2)
         self.ehead = attHead1(C1, C2)
         self.num_heads = num_heads
+        self.l_dim = 12
         self.a1 = nn.Parameter(torch.ones(num_heads, 1, 1))
+        self.a2 = nn.Parameter(torch.ones(num_heads, 1, 1))
 
         self.sr = nn.AvgPool2d(kernel_size=2, stride=2)
-
-        self.project_out = nn.Conv2d(C2, C, kernel_size=1, bias=bias)
-        self.out = nn.Conv2d(C2, C, kernel_size=1, bias=bias)
-
+        self.l_qkv = nn.Linear(C, self.l_dim*3, bias=bias)
+        self.upsample = nn.Upsample(scale_factor=2, mode='bilinear')
+        
+        self.project_out = nn.Conv2d(C2+self.l_dim, C, kernel_size=1, bias=bias)
+        
 
     def forward(self, x, e):
         """
@@ -211,54 +214,44 @@ class EEM(nn.Module):
         e: input edge (B, C1, H, W)
         """
         B, C, H, W = x.shape    
-        
-        # split into q_im, k_im, v_im
-        q1 = self.imhead(x) #(B, 2*C2, H, W) 
-
-        # split into k_edge
-        k_eg = self.ehead(e) #(B, C2, H, W) 
+       
 
         #=================================
-        # high freq
+        # high freq, edge
         # split into q, k, v 
 
-        q_im_ori, v_im_ori = q1.chunk(2, dim=1)
-        q_im = rearrange(q_im_ori, 'b (head c) h w -> b head c (h w)', head=self.num_heads) 
+        q1 = self.imhead(x) #(B, 2*C2, H, W) 
+        k_eg = self.ehead(e) #(B, C2, H, W) 
+        q_im, v_im = q1.chunk(2, dim=1)
+
+        q_im = rearrange(q_im, 'b (head c) h w -> b head c (h w)', head=self.num_heads) 
         k_eg = rearrange(k_eg, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-        v_im = rearrange(v_im_ori, 'b (head c) h w -> b head c (h w)', head=self.num_heads) #(B, head, C, H*W)
+        v_im = rearrange(v_im, 'b (head c) h w -> b head c (h w)', head=self.num_heads) #(B, head, C, H*W)
 
         q_im = torch.nn.functional.normalize(q_im, dim=-1)
         k_eg = torch.nn.functional.normalize(k_eg, dim=-1)
         
         attn = (q_im @ k_eg.transpose(-2, -1)) * self.a1 #(B, head, C, C)
         attn = attn.softmax(dim=-1)
-
+        out_hi = (attn @ v_im)
+        out_hi = rearrange(out_hi, 'b head c (h w) -> b (head c) h w', head=self.num_heads, h=H, w=W)
 
         #=================================
-        # low freq
-        
-        q1_low = self.sr(q1) #(B, 2*C2, H/2, W/2) 
-        q_im_low, k_im_low = q1_low.chunk(2, dim=1)
-        q_im_low = rearrange(q_im_low, 'b (head c) h w -> b head c (h w)', head=self.num_heads) 
-        k_im_low = rearrange(k_im_low, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
+        # low freq, image
+        x_lr = self.sr(x).reshape(B,C,-1).permute(0,2,1) #(B, HW/4, C)
+        qkv_lr = self.l_qkv(x_lr).reshape(B,-1,3,self.num_heads, self.l_dim // self.num_heads).permute(2,0,3,1,4) 
+        q_im, k_im, v_im = qkv_lr[0], qkv_lr[1], qkv_lr[2]
 
-        q_im_low = torch.nn.functional.normalize(q_im_low, dim=-1)
-        k_im_low = torch.nn.functional.normalize(k_im_low, dim=-1)
-        
-        attn = (q_im @ k_eg.transpose(-2, -1)) * self.a1 #(B, head, C, C)
+        attn = (q_im @ k_im.transpose(-2, -1)) * self.a2
         attn = attn.softmax(dim=-1)
-
-       
-
-
-
-
-        out = (attn @ v_im)
-
-
-        out = rearrange(out, 'b head c (h w) -> b (head c) h w', head=self.num_heads, h=H, w=W)
-
+        
+        out = (attn @ v_im).transpose(1,2).reshape(B, self.l_dim, H//2, W//2)
+        out_lr = self.upsample(out) #(B, C, H, W)
+        
+        #=================================
+        out = torch.cat([out_hi, out_lr], dim=1)
         out = self.project_out(out) #(B, C, H, W)
+        
         xout = x + out
         return xout #(B, C, H, W)
 
@@ -319,7 +312,6 @@ class attBlock(nn.Module):
         super(attBlock, self).__init__()
         
         self.b1 = EEM(C, C1, C2, num_heads, bias) 
-        self.b2 = IEM(C, C2, num_heads, bias) 
         self.dc = dataConsistencyLayer_fastmri(isFastmri=isFastmri)
 
     def forward(self, x, e, y, m):
@@ -328,13 +320,11 @@ class attBlock(nn.Module):
 
         x1 = self.b1(x, e)
         x1 = self.dc(x1, y, m)
-        x1 = self.b2(x1)
-        x1 = self.dc(x1, y, m)
         
         return x1
 
 
-class net_0702_var1(nn.Module):
+class net_0702_var3(nn.Module):
     """
     12 DAM + transformer block
     """
@@ -347,7 +337,7 @@ class net_0702_var1(nn.Module):
             n_RDB: number of RDBs 
 
         """
-        super(net_0702_var1, self).__init__()
+        super(net_0702_var3, self).__init__()
         
         # image module
         self.net1 = im_extractor(isFastmri=isFastmri, n_DAM=n_DAM)

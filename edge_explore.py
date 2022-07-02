@@ -1,6 +1,8 @@
 import os
 import cv2
 import numpy as np
+import time
+import math
 import h5py
 import matplotlib
 matplotlib.use('Agg')
@@ -10,6 +12,7 @@ import torch.nn.functional as F
 import torch
 from matplotlib import pyplot as plt
 import pdb
+from scipy import ndimage
 
 
 
@@ -52,19 +55,123 @@ class Get_gradient(nn.Module):
         return x
 
 
+def c2(r, r0, t):
+    return math.exp(-((r-r0)/float(t))**2)
 
 
-def Get_sobel(gt):
+
+def Get_sobel(gt, scale, delta):
 
     ddepth = cv2.CV_16S
-    scale = 1
-    delta = 0
     grad_x = cv2.Sobel(target*1e6, ddepth, 1, 0, ksize=3, scale=scale, delta=delta, borderType=cv2.BORDER_DEFAULT)
     grad_y = cv2.Sobel(target*1e6, ddepth, 0, 1, ksize=3, scale=scale, delta=delta, borderType=cv2.BORDER_DEFAULT)
     abs_grad_x = cv2.convertScaleAbs(grad_x)
     abs_grad_y = cv2.convertScaleAbs(grad_y)
     grad = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
     return grad
+
+
+def median_filter_ex():
+
+    # patient id and frame name 
+    fid = 1002382
+    frame = 30
+    scale = 1
+    delta = 0
+
+    fname = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/file{}.h5'.format(fid)
+    root = './images/edge_explore_{}_scale{}_delta{}'.format(fid, scale, delta)
+    if not os.path.exists(root):
+        os.makedirs(root)
+
+    # read data
+    with h5py.File(fname, 'r') as data:
+        kspace = h5py.File(fname,'r')['kspace']
+        target = data['reconstruction_esc'][frame] #(320,320)
+
+    # apply meadian filter
+    target_med = ndimage.median_filter(target, 3) 
+
+    gt_sobel = Get_sobel(target,scale, delta)
+    gt_sobel_med = Get_sobel(target_med, scale, delta)
+
+
+    plot_and_save(target, os.path.join(root,'frame{}_gt.png'.format(frame)))
+    plot_and_save(gt_sobel, os.path.join(root, 'frame{}_gt_sobel.png'.format(frame)))
+    plot_and_save(target_med, os.path.join(root,'frame{}_gt_med.png'.format(frame)))
+    plot_and_save(gt_sobel_med, os.path.join(root, 'frame{}_gt_sobel_med.png'.format(frame)))
+
+
+
+def meadian_filter_susan_op_ex():
+
+    # too slow
+    # patient id and frame name 
+
+    fid = 1002382
+    frame = 30
+
+    fname = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/file{}.h5'.format(fid)
+    root = './images/edge_explore_{}_susan'.format(fid)
+    if not os.path.exists(root):
+        os.makedirs(root)
+
+    # read data
+    with h5py.File(fname, 'r') as data:
+        kspace = h5py.File(fname,'r')['kspace']
+        target = data['reconstruction_esc'][frame] #(320,320)
+
+    pixels = target.copy()
+    pixels = cv2.normalize(target*1e6,  pixels, 0, 255, cv2.NORM_MINMAX)
+    t = 10
+    r = 3.4
+    md = int(math.ceil(r*2))
+    m = [[0, 0, 1, 1, 1, 0, 0],
+        [0, 1, 1, 1, 1, 1, 0],
+        [1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1],
+        [1, 1, 1, 1, 1, 1, 1],
+        [0, 1, 1, 1, 1, 1, 0],
+        [0, 0, 1, 1, 1, 0, 0]]
+    
+    count = 37
+    g = 3.0*count/4.0
+    n = [[0 for x in range(320)] for x in range(320)]
+
+    t1 = time.time()
+    for x in range(320):
+        for y in range(320):
+            for xr in range(md):
+                    for yr in range(md):
+                        xx = int(x-r+xr)
+                        yy = int(y-r+yr)
+                        if m[xr][yr] == 1 and xx>=0 and xx<320 and yy>=0 and yy<320:
+                            cdif = c2(pixels[xx, yy], pixels[x,y], t)
+                            n[x][y] += cdif
+    
+    for x in range(320):
+        for y in range(320):
+            if n[x][y] < g:
+                n[x][y] = g - n[x][y]
+            else:
+                n[x][y] = 0
+
+    
+    for x in range(320):
+        for y in range(320):
+            if n[x][y] != 0:
+                pixels[x,y] = int(n[x][y] * 255/g)
+            else:
+                pixels[x,y] = 0
+
+    print("finish time {}".format(time.time() - t1))
+
+
+    plot_and_save(target, os.path.join(root,'frame{}_gt.png'.format(frame)))
+    plot_and_save(pixels, os.path.join(root, 'frame{}_gt_susan.png'.format(frame)))
+
+
+
 
 
 
@@ -74,49 +181,7 @@ if __name__ == '__main__':
 
     #fname = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_train/file1001475.h5' 
 
-    fid = 1000356
-    frame = 25
-
-    fname = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_val/file{}.h5'.format(fid)
-    root = './images/edge_explore_{}'.format(fid)
-    if not os.path.exists(root):
-        os.mkdir(root)
-
-    edgeExtract = Get_gradient()
-
-    # read data
-    with h5py.File(fname, 'r') as data:
-        kspace = h5py.File(fname,'r')['kspace']
-        target = data['reconstruction_esc'][frame] #(320,320)
-
-    
-    target_tor = im2tensor(target) # (1,2,320,320)
-
-    # soft edge
-    gt_se = edgeExtract(target_tor) #(1,2,320,320)
-    gt_se = gt_se[0,0,:,:].numpy()
-
-    # sobel edge  
-    gt_sobel = Get_sobel(target)
-
-    plot_and_save(target, os.path.join(root,'frame{}_gt.png'.format(frame)))
-    plot_and_save(gt_se, os.path.join(root,'frame{}_gt_se.png'.format(frame)))
-    plot_and_save(gt_sobel, os.path.join(root, 'frame{}_gt_sobel.png'.format(frame)))
-
-    '''
-    # blur target and then save soft edge and sobel
-    for kernel in [3,5,7,9]:
-        for sigma in [0,0.5,1,2,4,6,9]: 
-            gt_blur = cv2.GaussianBlur(target, (kernel,kernel), sigma) 
-            gt_blur_tor = im2tensor(gt_blur)
-            gt_blur_se = edgeExtract(gt_blur_tor)[0,0,:,:].numpy()
-            gt_blur_sobel = Get_sobel(gt_blur)
-
-            plot_and_save(gt_blur_se, os.path.join(root,'frame{}_gt_kernel{}sigma{}_blur_se.png'.format(frame,kernel,sigma)))
-            plot_and_save(gt_blur_sobel, os.path.join(root, 'frame{}_gt_kernel{}sigma{}_blur_sobel.png'.format(frame, kernel, sigma)))
-
-    '''
-
+    meadian_filter_susan_op_ex()
 
 
 
