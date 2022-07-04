@@ -681,7 +681,16 @@ class FeedbackBlock(nn.Module):
 
 #==========================================
 class denseConv(nn.Module):
-    def __init__(self, inChannel=16, kernelSize=3, growthRate=16, layer=4, inceptionLayer = False, dilationLayer = False, activ = 'ReLU', useOri = False):
+    def __init__(self, 
+            inChannel=16, 
+            kernelSize=3, 
+            growthRate=16, 
+            layer=4, 
+            inceptionLayer = False, 
+            dilationLayer = False, 
+            activ = 'ReLU', 
+            useOri = False):
+
         super(denseConv, self).__init__()
         dilate = 1
         if(dilationLayer):
