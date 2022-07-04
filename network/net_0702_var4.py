@@ -175,8 +175,8 @@ class attHead1(nn.Module):
         """
         x: (B, C, H, W)
         """ 
-        x1 = self.norm(x) #(B, H, W, C)
-        x1 = self.conv(x1)  #(B, C1, H, W)
+        #x1 = self.norm(x) #(B, H, W, C)
+        x1 = self.conv(x)  #(B, C1, H, W)
 
         return x1
 
@@ -315,6 +315,8 @@ class attBlock(nn.Module):
         
         self.b1 = EEM(C, C1, C2, num_heads, bias) 
         self.dc = dataConsistencyLayer_fastmri(isFastmri=isFastmri)
+        self.b2 = IEM(C, C2, num_heads, bias) 
+        self.dc = dataConsistencyLayer_fastmri(isFastmri=isFastmri)
 
     def forward(self, x, e, y, m):
 
@@ -322,13 +324,13 @@ class attBlock(nn.Module):
 
         x1 = self.b1(x, e)
         x1 = self.dc(x1, y, m)
+        x1 = self.b2(x1)
+        x1 = self.dc(x1, y, m)
         
         return x1
 
 
-
-
-class net_0702_var3(nn.Module):
+class net_0702_var4(nn.Module):
     """
     12 DAM + transformer block
     """
@@ -341,7 +343,7 @@ class net_0702_var3(nn.Module):
             n_RDB: number of RDBs 
 
         """
-        super(net_0702_var3, self).__init__()
+        super(net_0702_var4, self).__init__()
         
         # image module
         self.net1 = im_extractor(isFastmri=isFastmri, n_DAM=n_DAM)
@@ -390,8 +392,8 @@ class net_0702_var3(nn.Module):
         (e4, e4_d) = self.edgeNet(x1) 
         x1 = self.fuse4(x2, e4, y, m)
 
-
         return (e2_d,e3_d,e4_d,x1)
+
 
 
 

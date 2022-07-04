@@ -1,7 +1,7 @@
 "sample code for fastmri training and evaluating"
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "4"
+os.environ["CUDA_VISIBLE_DEVICES"] = "2"
 import sys
 import time
 import cv2
@@ -435,11 +435,13 @@ def main(args):
     param = paramNumber(model)
     logger.debug("model parameters : {}".format(param))
 
+
     # dataloader
     train_loader, dev_loader = getDataloader(args.dataName, args.dataMode, args.batchSize, [args.center_fractions], [args.accer], args.resolution, args.train_root, args.valid_root, args.sample_rate, args.challenge)
 
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_step_size, args.lr_gamma)
 
+    print(torch.cuda.memory_summary())
     # ====================================
     # training mode
     if not args.is_evaluate:

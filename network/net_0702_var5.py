@@ -6,6 +6,7 @@ import sys
 sys.path.insert(0,'..')
 import torch
 from torch import nn
+import torch.utils.checkpoint as checkpoint
 from fastmri.data import transforms_simple as T
 from torch.nn import functional as F
 import pdb
@@ -181,6 +182,30 @@ class attHead1(nn.Module):
         return x1
 
 
+class attHead2(nn.Module):
+    """
+    norm + 3*3 dconv
+    """
+    
+    def __init__(self, C, C1, layernorm_type= 'BiasFree', bias=False):
+        """
+        C: input channel 
+        C1: output channel after 1*1 conv
+
+        """
+        super(attHead2,self).__init__()
+        self.norm = LayerNorm(C, layernorm_type)
+        #self.conv = nn.Conv2d(C, C1, kernel_size=3, stride=1, padding=1, groups=C1, bias=bias)
+
+    def forward(self, x):
+        """
+        x: (B, C, H, W)
+        """ 
+        x1 = self.norm(x) #(B, H, W, C)
+        #x1 = self.conv(x1)  #(B, C1, H, W)
+
+        return x1
+
 
 
 class EEM(nn.Module):
@@ -197,26 +222,31 @@ class EEM(nn.Module):
         self.imhead = attHead(C, 2 * C2)
         self.ehead = attHead1(C1, C2)
         self.num_heads = num_heads
-        self.l_dim = 12
-        self.down_scale = 4
+         
         self.a1 = nn.Parameter(torch.ones(num_heads, 1, 1))
         self.a2 = nn.Parameter(torch.ones(num_heads, 1, 1))
 
-        self.sr = nn.AvgPool2d(kernel_size=self.down_scale, stride=self.down_scale)
+        # ==========================
+        # img att
+        self.im_dim = 12
+        #self.imhead1 = attHead2(C,self.im_dim)
+        self.ws = 8 # window size
+        self.im_qkv = nn.Linear(C, self.im_dim*3, bias=bias)
+        self.im_proj = nn.Linear(self.im_dim, self.im_dim)
 
-        self.l_qkv = nn.Linear(C, self.l_dim*3, bias=bias)
-        self.upsample = nn.Upsample(scale_factor=self.down_scale, mode='bilinear')
-        
-        self.project_out = nn.Conv2d(C2+self.l_dim, C, kernel_size=1, bias=bias)
+
+        # ==========================
+        # final
+        self.project_out = nn.Conv2d(C2+self.im_dim, C, kernel_size=1, bias=bias)
         
 
-    def forward(self, x, e):
+    def edge_att(self, x, e):
         """
+        edge attention
         x: input image (B, C, H, W)
         e: input edge (B, C1, H, W)
         """
         B, C, H, W = x.shape    
-       
 
         #=================================
         # high freq, edge
@@ -235,26 +265,49 @@ class EEM(nn.Module):
         
         attn = (q_im @ k_eg.transpose(-2, -1)) * self.a1 #(B, head, C, C)
         attn = attn.softmax(dim=-1)
-        out_hi = (attn @ v_im)
-        out_hi = rearrange(out_hi, 'b head c (h w) -> b (head c) h w', head=self.num_heads, h=H, w=W)
+        out = (attn @ v_im)
+        out = rearrange(out, 'b head c (h w) -> b (head c) h w', head=self.num_heads, h=H, w=W)
 
+        return out 
+
+
+    def img_att(self, x):
+        """
+        local window attention
+        """ 
+       
+        # normalize
+        #x = self.imhead1(x) 
+        
+        B, C, H, W = x.shape    
         #=================================
-        # low freq, image
-        x_lr = self.sr(x).reshape(B,C,-1).permute(0,2,1) #(B, HW/4, C)
-        qkv_lr = self.l_qkv(x_lr).reshape(B,-1,3,self.num_heads, self.l_dim // self.num_heads).permute(2,0,3,1,4) 
-        q_im, k_im, v_im = qkv_lr[0], qkv_lr[1], qkv_lr[2]
+        h_group, w_group = H // self.ws, W // self.ws
+        total_groups = h_group * w_group
+        x = x.reshape(B, h_group, self.ws, w_group, self.ws, C).transpose(2, 3) #(B, h_group, w_group, self.ws, self.ws, C)
+        qkv = self.im_qkv(x).reshape(B, total_groups, -1, 3, self.num_heads, self.im_dim// self.num_heads).permute(3, 0, 1, 4, 2, 5)
+        q, k, v = qkv[0], qkv[1], qkv[2]  # B, hw, n_head, ws*ws, head_dim
 
-        attn = (q_im @ k_im.transpose(-2, -1)) * self.a2
+        attn = (q @ k.transpose(-2, -1)) * self.a2 # B, hw, n_head, ws*ws, ws*ws
         attn = attn.softmax(dim=-1)
+
+        attn = (attn @ v).transpose(2, 3).reshape(B, h_group, w_group, self.ws, self.ws, self.im_dim)
+        out = attn.transpose(2, 3).reshape(B, h_group * self.ws, w_group * self.ws, self.im_dim) #(B, H, W, im_dim)
+        out = self.im_proj(out) #(B, H, W, im_dim)
+        out = out.permute(0,3,1,2)
         
-        out = (attn @ v_im).transpose(1,2).reshape(B, self.l_dim, H//self.down_scale, W//self.down_scale)
-        out_lr = self.upsample(out) #(B, C, H, W)
-        
-        #=================================
-        out = torch.cat([out_hi, out_lr], dim=1)
+        return out
+         
+
+
+    def forward(self, x, e):
+
+        out_im = self.img_att(x)
+        out_eg = self.edge_att(x,e)
+
+        out = torch.cat([out_im, out_eg], dim=1)
         out = self.project_out(out) #(B, C, H, W)
-        
         xout = x + out
+        
         return xout #(B, C, H, W)
 
 
@@ -326,9 +379,7 @@ class attBlock(nn.Module):
         return x1
 
 
-
-
-class net_0702_var3(nn.Module):
+class net_0702_var5(nn.Module):
     """
     12 DAM + transformer block
     """
@@ -341,7 +392,7 @@ class net_0702_var3(nn.Module):
             n_RDB: number of RDBs 
 
         """
-        super(net_0702_var3, self).__init__()
+        super(net_0702_var5, self).__init__()
         
         # image module
         self.net1 = im_extractor(isFastmri=isFastmri, n_DAM=n_DAM)
@@ -378,20 +429,22 @@ class net_0702_var3(nn.Module):
         # second stage
         x2 = self.net2(x1, y, m) #(B, 2, H, W)
         (e2, e2_d) = self.edgeNet(x1) 
-        x1 = self.fuse2(x2, e2, y, m)
+        x1 = checkpoint.checkpoint(self.fuse2, x2, e2, y, m)
 
         # third stage
         x2 = self.net3(x1, y, m) #(B, 2, H, W)
         (e3, e3_d) = self.edgeNet(x1) 
-        x1 = self.fuse3(x2, e3, y, m)
+        x1 = checkpoint.checkpoint(self.fuse3, x2, e3, y, m)
 
         # fourth stage
         x2 = self.net4(x1, y, m) #(B, 2, H, W)
         (e4, e4_d) = self.edgeNet(x1) 
-        x1 = self.fuse4(x2, e4, y, m)
+        x1 = checkpoint.checkpoint(self.fuse4, x2, e4, y, m)
 
 
         return (e2_d,e3_d,e4_d,x1)
+
+
 
 
 

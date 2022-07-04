@@ -38,7 +38,9 @@ from .net_0626 import net_0626
 from .net_0702 import net_0702
 from .net_0702_var1 import net_0702_var1
 from .net_0702_var2 import net_0702_var2
-from .net_0702_var3 import net_0702_var3
+from .net_0702_var3 import net_0702_var3 
+from .net_0702_var4 import net_0702_var4
+from .net_0702_var5 import net_0702_var5
 
 
 def getScheduler(optimizer, config):
@@ -121,26 +123,6 @@ def getNet(netType):
         return mdr(isFastmri=False)
     elif (netType == 'mdr_fastmri'):
         return mdr(isFastmri=True)
-
-    #===========edgeNet============
-    elif (netType == 'edgeNet'):
-        return edgeNet(2,32,2,4)
-    elif (netType == 'edgeNet_var2'):
-        return edgeNet_var2(2,32,2,4)
-    elif (netType == 'edgeNet_var3'):
-        return edgeNet_var3(2,32,2,4)
-    elif (netType == 'edgeNet_var3_fuse2'):
-        return edgeNet_var3_fuse2(2,48,2,4)
-    elif (netType == 'edgeNet_var3_eam2'):
-        return edgeNet_var3_eam2(2,32,2,6)
-    elif (netType == 'edgeNet_var3_nfe_eam2'):
-        return edgeNet_var3_nfe_eam2(2,32,2,4)
-    elif (netType == 'edgeNet_var3_nfe_eam2_fuse3'):
-        return edgeNet_var3_nfe_eam2_fuse3(2,32,2,4)
-    elif (netType == 'edgeNet_var3_nfe_eam2_fuse3_big'):
-        return edgeNet_var3_nfe_eam2_fuse3(2,64,2,4)
-    elif (netType == 'edgeNet_var3_rdg_eam2_fuse3_rdg'):
-        return edgeNet_var3_rdg_eam2_fuse3_rdg(2,64,2,4)
 
     #===========cascaded_edgeNet============
     elif (netType == 'casEdgeNet'):
@@ -284,15 +266,16 @@ def getNet(netType):
     # =========================================================
     elif (netType == 'net_0702'):
         return net_0702(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-
     elif (netType == 'net_0702_var1'):
         return net_0702_var1(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-
     elif (netType == 'net_0702_var2'):
         return net_0702_var2(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-
     elif (netType == 'net_0702_var3'):
         return net_0702_var3(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+    elif (netType == 'net_0702_var4'):
+        return net_0702_var4(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+    elif (netType == 'net_0702_var5'):
+        return net_0702_var5(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
     # =========================================================
     else:
         assert False,"Wrong net type"
