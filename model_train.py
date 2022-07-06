@@ -441,7 +441,7 @@ def main(args):
 
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, args.lr_step_size, args.lr_gamma)
 
-    print(torch.cuda.memory_summary())
+    #print(torch.cuda.memory_summary())
     # ====================================
     # training mode
     if not args.is_evaluate:
@@ -477,9 +477,8 @@ def main(args):
             visualize(args , model, dev_loader)
 
         else:
-            #dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume_edge(model, dev_loader, args)
-            #logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
-
+            dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume_edge(model, dev_loader, args)
+            logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
             visualize_edge(args , model, dev_loader)
  
 

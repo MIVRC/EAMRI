@@ -4,6 +4,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
+from einops import rearrange
+import numbers
 from torch.nn.parameter import Parameter
 from fastmri.data import transforms_simple as T
 import pdb
@@ -11,76 +13,9 @@ import pdb
 
 #=================================================================
 # adapted from seanet
-def default_conv(in_channels, out_channels, kernel_size, bias=True):
-    return nn.Conv2d(
-        in_channels, out_channels, kernel_size,
-        padding=(kernel_size//2), bias=bias)
+def default_conv(in_channels, out_channels, kernel_size, dilate=1, bias=True):
+    return nn.Conv2d(in_channels, out_channels, kernel_size, padding=dilate, dilation=dilate, bias=bias) 
 
-
-class MSRB(nn.Module):
-    def __init__(self, n_feats, kernel_size_1 = 3, kernel_size_2 = 5, conv=default_conv):
-        super(MSRB, self).__init__()
-
-        #n_feats = 64
-
-        self.conv_3_1 = conv(n_feats, n_feats, kernel_size_1)
-        self.conv_3_2 = conv(n_feats * 2, n_feats * 2, kernel_size_1)
-        self.conv_5_1 = conv(n_feats, n_feats, kernel_size_2)
-        self.conv_5_2 = conv(n_feats * 2, n_feats * 2, kernel_size_2)
-        self.confusion = nn.Conv2d(n_feats * 4, n_feats, 1, padding=0, stride=1)
-        self.relu = nn.ReLU(inplace=True)
-
-    def forward(self, x):
-        input_1 = x
-        output_3_1 = self.relu(self.conv_3_1(input_1))
-        output_5_1 = self.relu(self.conv_5_1(input_1))
-        input_2 = torch.cat([output_3_1, output_5_1], 1)
-        output_3_2 = self.relu(self.conv_3_2(input_2))
-        output_5_2 = self.relu(self.conv_5_2(input_2))
-        input_3 = torch.cat([output_3_2, output_5_2], 1)
-        output = self.confusion(input_3)
-        output += x
-        return output
-
-
-class sea_edgeNet(nn.Module):
-    # adopted from edgenet of seanet
-    def __init__(self, inFeat=1, outFeat=1, nFeat=16, ks=3, n_blocks=1, conv=default_conv):
-        super(sea_edgeNet, self).__init__()
-        
-        act = nn.ReLU(True)
-        self.n_blocks = n_blocks
-        
-        modules_head = [conv(inFeat, nFeat, ks)] # increase channel
-
-        modules_body = nn.ModuleList()
-        for i in range(n_blocks):
-            modules_body.append(MSRB(n_feats=nFeat))
-
-        modules_tail = [nn.Conv2d(nFeat * (self.n_blocks + 1), outFeat, 1, padding=0, stride=1)]
-
-        self.Edge_Net_head = nn.Sequential(*modules_head)
-        self.Edge_Net_body = nn.Sequential(*modules_body)
-        self.Edge_Net_tail = nn.Sequential(*modules_tail)
-
-    def forward(self, x):
-        x = self.Edge_Net_head(x)
-        res = x
-
-        MSRB_out = []
-        for i in range(self.n_blocks):
-            x = self.Edge_Net_body[i](x)
-            MSRB_out.append(x)
-        MSRB_out.append(res)
-
-        res = torch.cat(MSRB_out,1)
-        x = self.Edge_Net_tail(res)
-        return x 
-
-
-
-
-#=================================================================
 
 
 
@@ -125,6 +60,64 @@ class Get_gradient(nn.Module):
             raise NotImplementedError
     
         return x
+
+
+
+##########################################################################
+## Layer Norm
+
+def to_3d(x):
+    return rearrange(x, 'b c h w -> b (h w) c')
+
+def to_4d(x,h,w):
+    return rearrange(x, 'b (h w) c -> b c h w',h=h,w=w)
+
+class BiasFree_LayerNorm(nn.Module):
+    def __init__(self, normalized_shape):
+        super(BiasFree_LayerNorm, self).__init__()
+        normalized_shape = (normalized_shape,)
+        normalized_shape = torch.Size(normalized_shape)
+
+        assert len(normalized_shape) == 1
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.normalized_shape = normalized_shape
+
+    def forward(self, x):
+        sigma = x.var(-1, keepdim=True, unbiased=False)
+        return x / torch.sqrt(sigma+1e-5) * self.weight
+
+class WithBias_LayerNorm(nn.Module):
+    def __init__(self, normalized_shape):
+        super(WithBias_LayerNorm, self).__init__()
+        if isinstance(normalized_shape, numbers.Integral):
+            normalized_shape = (normalized_shape,)
+        normalized_shape = torch.Size(normalized_shape)
+
+        assert len(normalized_shape) == 1
+
+        self.weight = nn.Parameter(torch.ones(normalized_shape))
+        self.bias = nn.Parameter(torch.zeros(normalized_shape))
+        self.normalized_shape = normalized_shape
+
+    def forward(self, x):
+        mu = x.mean(-1, keepdim=True)
+        sigma = x.var(-1, keepdim=True, unbiased=False)
+        return (x - mu) / torch.sqrt(sigma+1e-5) * self.weight + self.bias
+
+
+
+class LayerNorm(nn.Module):
+    def __init__(self, dim, bias=False):
+        super(LayerNorm, self).__init__()
+
+        if bias:
+            self.body = WithBias_LayerNorm(dim)
+        else:
+            self.body = BiasFree_LayerNorm(dim)
+
+    def forward(self, x):
+        h, w = x.shape[-2:]
+        return to_4d(self.body(to_3d(x).contiguous()), h, w).contiguous()
 
 
 #======================================
@@ -709,14 +702,16 @@ class denseConv(nn.Module):
                                             bottleneckChannel=inChannel,
                                             dilateScale=dilate, activ=activ)
             else:
-                tempLayer = denseBlockLayer(inChannel+growthRate*i, growthRate, kernelSize, inceptionLayer, dilate, activ)
+                tempLayer = new_denseBlockLayer(indim=inChannel+growthRate*i, middim=inChannel, outdim=inChannel+growthRate*i)
+
+
             dilate = dilate * dilateMulti
             templayerList.append(tempLayer)
         self.layerList = nn.ModuleList(templayerList)
             
     def forward(self,x):
         for i in range(0, self.denselayer):
-            tempY = self.layerList[i](x.contiguous())
+            tempY = self.layerList[i](x)
             x = torch.cat((x, tempY), 1)
             
         return x.contiguous()
@@ -737,6 +732,7 @@ class DAM1(nn.Module):
             self.activ = nn.LeakyReLU()
         elif(activation == 'ReLU'):
             self.activ = nn.ReLU()
+        
         self.denseConv = denseConv(fNum, 3, growthRate, layer - 2, dilationLayer = dilate, activ = activation, useOri = useOri)
         
         if(transition>0):
@@ -752,6 +748,7 @@ class DAM1(nn.Module):
         x2 = self.denseConv(x1) #(8,64,256,256)
         x2 = self.transitionLayer(x2) #(8,32,256,256)
         xout = self.outConv(x2) + x1 #(8,16,256,256)
+
         return xout
 
 
@@ -812,69 +809,147 @@ class DAM(nn.Module):
         x2 = self.denseConv(x2) #(8,64,256,256)
         x2 = self.transitionLayer(x2) #(8,32,256,256)
         x2 = self.outConv(x2) #(8,2,256,256)
+    
         if(self.residual):
             x2 = x2+x[:,:self.outChannel]
 
         return x2
 
 
-class DAM2(nn.Module):
-    '''
-    basic DAM module 
-    '''
-    def __init__(self, inChannel = 2, 
-                        fNum = 16, 
-                        stride = 2,
-                        padding = 1, 
-                        growthRate = 16, 
-                        layer = 3, 
-                        dilate = False, 
-                        activation = 'ReLU', 
-                        useOri = False, 
-                        transition = 0.5):
+#===========================================================================================
+
+class new_denseBlockLayer(nn.Module):
+    """
+    bn + relu + conv + bn + relu + conv
+    """
+    def __init__(self, 
+                indim=64, 
+                middim= 64, 
+                outdim=64, 
+                bias=True):
+
+        super(new_denseBlockLayer, self).__init__()
+        
+        # first stage
+        self.norm1 = LayerNorm(indim)
+        self.conv1 = nn.Conv2d(indim, middim,1, bias=bias)  # 1*1 conv
+        self.conv2 = nn.Conv2d(middim, middim, 3, padding=1, stride=1, groups=middim, bias=bias)  # 3*3 conv
+        self.conv3 = nn.Conv2d(middim, indim, 1, padding=0, stride=1, groups=1, bias=bias) # 1*1 conv
+        self.relu1 = nn.GELU()
+        
+        self.norm2 = LayerNorm(indim)
+        self.conv4 = nn.Conv2d(indim, middim, 1, bias=bias)  # 1*1 conv
+        self.conv5 = nn.Conv2d(middim, middim, 3, padding=1, stride=1, groups=middim, bias=bias)  # 3*3 conv
+        self.conv6 = nn.Conv2d(middim, outdim, 1, padding=0, stride=1, groups=1, bias=bias) 
+        self.relu2 = nn.GELU()
+ 
+            
+    def forward(self,x):
+        
+        x1 = self.norm1(x)
+        x1 = self.conv1(x1)
+        x1 = self.conv2(x1)
+        x1 = self.relu1(x1)
+        x1 = self.conv3(x1)
+        y = x + x1
+        
+        y1 = self.norm2(y)
+        y1 = self.conv4(y1)
+        y1 = self.conv5(y1)
+        y1 = self.relu2(y1)
+        y1 = self.conv6(y1)
+        
+        return y + y1
 
 
-        super(DAM2, self).__init__()
-        self.inChannel = inChannel
-        self.outChannel = inChannel
-        self.transition = transition
 
-        self.inConv = nn.Conv2d(inChannel, fNum, 3, stride=stride, padding = padding) # (16,2,3,3)
+class new_denseConv(nn.Module):
+    """
+    multiple new_denseBlockLayer
+    """
 
-        self.activ = nn.ReLU()
+    def __init__(self, 
+            inChannel=16, 
+            expand=2, 
+            layer=4):
 
-        self.denseConv = denseConv(inChannel=fNum, \
-                                    kernelSize=3,\
-                                    growthRate=growthRate, \
-                                    layer = layer - 2, \
-                                    dilationLayer = dilate,\
-                                    activ = activation, \
-                                    useOri = useOri)
+        super(new_denseConv, self).__init__()
        
+        self.denselayer = layer
+        templayerList = []
+        for i in range(0, layer):
+            tempLayer = new_denseBlockLayer(indim=inChannel, 
+                                            middim=inChannel*expand,  
+                                            outdim=inChannel)
+                                            
+            templayerList.append(tempLayer)
 
-        if(transition>0):
-            self.transitionLayer = transitionLayer(inChannel=fNum+growthRate*(layer-2), \
-                                                    compressionRate = transition, \
-                                                    activ = activation)
+        self.layerList = nn.ModuleList(templayerList)
+            
+    def forward(self,x):
+        x1 = x
+        for i in range(0, self.denselayer):
+            x1 = self.layerList[i](x1)
+        
+        return x + x1
 
-            self.outConv = nn.ConvTranspose2d(int((fNum+growthRate*(layer-2))*transition), \
-                                            self.outChannel, \
-                                            kernel_size=4, \
-                                            stride=stride, \
-                                            padding=padding)
+
+
+class new_transitionLayer(nn.Module):
+    def __init__(self, indim=64, outdim=2, expand=2, bias=True): 
+        super(new_transitionLayer, self).__init__()
+
+        middim = int(indim * expand)
+        self.norm = LayerNorm(indim)
+        self.conv1 = nn.Conv2d(indim, middim, 1, bias=bias)
+        self.conv2 = nn.Conv2d(middim, middim, 3, padding=1, stride=1, groups=middim, bias=bias)  # 3*3 conv
+        self.conv3 = nn.Conv2d(middim, outdim, 1, padding=0, stride=1, groups=1, bias=bias) 
+        self.relu = nn.GELU()
+        
+        
+    def forward(self,x):
+        
+        x1 = self.norm(x)
+        x1 = self.conv1(x1)
+        x1 = self.conv2(x1)
+        x1 = self.relu(x1)
+        x1 = self.conv3(x1)
+
+        return x1
+
+
+
+class new_DAM(nn.Module):
+    '''
+    new DAM module 
+    '''
+    def __init__(self, 
+                indim= 2, 
+                fNum = 16, 
+                expand = 2, 
+                layer = 3):
+
+        super(new_DAM, self).__init__()
+        self.indim = indim 
+        self.outChannel = indim 
+
+        self.intro = nn.Conv2d(indim, fNum, kernel_size=3, padding = 1, groups=1, bias=True) 
+
+        self.denseConv = new_denseConv(inChannel=fNum, \
+                                    expand=expand, \
+                                    layer = layer)
+      
+        self.outConv = new_transitionLayer(indim=fNum, outdim=indim)
 
 
     def forward(self, x):
 
-        x2 = self.inConv(x) #[8,16,128,128]
-        x2 = self.denseConv(x2) #(8,64,128,128)
-        x2 = self.transitionLayer(x2) #(8,32,128,128)
+        x2 = self.intro(x) #[B,16,H,W]
+        x2 = self.denseConv(x2) #(8,64,256,256)
         x2 = self.outConv(x2) #(8,2,256,256)
         x2 = x2+x[:,:self.outChannel]
 
         return x2
-
-
 
 
 
@@ -973,6 +1048,7 @@ class denseBlockLayer_origin(nn.Module):
     """
     def __init__(self,inChannel=64, outChannel=64, kernelSize = 3, bottleneckChannel = 64, dilateScale = 1, activ = 'ReLU'):
         super(denseBlockLayer_origin, self).__init__()
+        
         pad = int((kernelSize-1)/2)
 
         self.bn = nn.BatchNorm2d(inChannel)
@@ -990,15 +1066,20 @@ class denseBlockLayer_origin(nn.Module):
         
             
     def forward(self,x):
-        x1 = self.bn(x)
+        
+        x1 = self.bn(x) #(B, indim, H, W)
         x1 = self.relu(x1)
-        x1 = self.conv(x1)
+        x1 = self.conv(x1) #(B, middim, H, W)
         x1 = self.bn2(x1)
         x1 = self.relu2(x1)
-        y = self.conv2(x1)
+        y = self.conv2(x1) #(B, outdim, H, W)
             
         return y
-    
+
+
+
+
+
 class denseBlock_origin(nn.Module):
     def __init__(self, inChannel=64, kernelSize=3, growthRate=16, layer=4, bottleneckMulti = 4, dilationLayer = False, activ = 'ReLU'):
         super(denseBlock_origin, self).__init__()
@@ -1022,7 +1103,8 @@ class denseBlock_origin(nn.Module):
             x = torch.cat((x, tempY), 1)
             
         return x
-    
+   
+
 class transitionLayer(nn.Module):
     def __init__(self, inChannel = 64, compressionRate = 0.5, activ = 'ReLU'):
         super(transitionLayer, self).__init__()

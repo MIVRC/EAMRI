@@ -22,12 +22,12 @@ class convBlock(nn.Module):
     """
     DAM + DC
     """
-    def __init__(self, indim=2, fNum=16, growthRate=16, layer=3, dilate=True, activation='ReLU', useOri=True, transition=0.5, isFastmri=True, n_DAM=3):
+    def __init__(self, indim=2, fNum=16, expand=2, layer=3, n_DAM=3, isFastmri=True):
         
         super(convBlock, self).__init__()
         layers = []
         for _ in range(n_DAM):
-            layers.append(DAM(indim, fNum, growthRate, layer, dilate, activation, useOri, transition, residual=True))
+            layers.append(new_DAM(indim, fNum, expand, layer))
             layers.append(dataConsistencyLayer_fastmri(isFastmri=isFastmri))
 
         self.layers = nn.ModuleList(layers)
@@ -400,7 +400,9 @@ class attBlock(nn.Module):
         return x1
 
 
-class net_0705(nn.Module):
+
+
+class net_0705_var2(nn.Module):
     """
     12 DAM + transformer block
     """
@@ -408,9 +410,9 @@ class net_0705(nn.Module):
                 img_size=320, 
                 indim=2, 
                 convDim=16,
+                expand=2,
                 edgeFeat=16, 
                 attdim =12, 
-                growthRate=16,
                 DAM_denseLayer=5,
                 num_head=4, 
                 n_MSRB=3, 
@@ -424,14 +426,14 @@ class net_0705(nn.Module):
             n_RDB: number of RDBs 
 
         """
-        super(net_0705, self).__init__()
-        
+        super(net_0705_var2, self).__init__()
+
+
         # image module
-        self.steam = convBlock(indim=indim, fNum=convDim, growthRate=growthRate, layer=DAM_denseLayer, dilate=True, isFastmri=isFastmri, n_DAM=n_DAM)
-        self.conv1 = convBlock(indim=indim, fNum=convDim, growthRate=growthRate, layer=DAM_denseLayer, dilate=True, isFastmri=isFastmri, n_DAM=n_DAM)
-        self.conv2 = convBlock(indim=indim, fNum=convDim, growthRate=growthRate, layer=DAM_denseLayer, dilate=True, isFastmri=isFastmri, n_DAM=n_DAM)
-        self.conv3 = convBlock(indim=indim, fNum=convDim, growthRate=growthRate, layer=DAM_denseLayer, dilate=True, isFastmri=isFastmri, n_DAM=n_DAM)
-        self.conv4 = convBlock(indim=indim, fNum=convDim, growthRate=growthRate, layer=DAM_denseLayer, dilate=True, isFastmri=isFastmri, n_DAM=n_DAM)
+        self.conv1 = convBlock(indim=indim, fNum=convDim, expand=expand, layer=DAM_denseLayer, n_DAM=n_DAM, isFastmri=isFastmri)
+        self.conv2 = convBlock(indim=indim, fNum=convDim, expand=expand, layer=DAM_denseLayer, n_DAM=n_DAM, isFastmri=isFastmri)
+        self.conv3 = convBlock(indim=indim, fNum=convDim, expand=expand, layer=DAM_denseLayer, n_DAM=n_DAM, isFastmri=isFastmri)
+        self.conv4 = convBlock(indim=indim, fNum=convDim, expand=expand, layer=DAM_denseLayer, n_DAM=n_DAM, isFastmri=isFastmri)
 
         self.dc = dataConsistencyLayer_fastmri(isFastmri=isFastmri)
         
@@ -457,30 +459,25 @@ class net_0705(nn.Module):
         """
 
         # image stem
-        x1 = self.steam(x1, y, m) #(B, 2, H, W)
+        x1 = self.conv1(x1, y, m) #(B, 2, H, W)
 
         # first stage
-        x2 = self.conv1(x1, y, m) #(B, 2, H, W)
+        x2 = self.conv2(x1, y, m) #(B, 2, H, W)
         (e1_feat, e1) = self.edgeNet(x1) 
         x1 = checkpoint.checkpoint(self.fuse1, x2, e1_feat, y, m)
 
         # second stage
-        x2 = self.conv2(x1, y, m) #(B, 2, H, W)
+        x2 = self.conv3(x1, y, m) #(B, 2, H, W)
         (e2_feat, e2) = self.edgeNet(x1) 
         x1 = checkpoint.checkpoint(self.fuse2, x2, e2_feat, y, m)
 
         # third stage
-        x2 = self.conv3(x1, y, m) #(B, 2, H, W)
+        x2 = self.conv4(x1, y, m) #(B, 2, H, W)
         (e3_feat, e3) = self.edgeNet(x1) 
         x1 = checkpoint.checkpoint(self.fuse3, x2, e3_feat, y, m)
 
-        # forth stage
-        x2 = self.conv4(x1, y, m) #(B, 2, H, W)
-        (e4_feat, e4) = self.edgeNet(x1) 
-        x1 = checkpoint.checkpoint(self.fuse4, x2, e4_feat, y, m)
-
         
-        return (e1,e2,e3,e4,x1)
+        return (e1,e2,e3,x1)
 
 
 

@@ -42,6 +42,8 @@ from .net_0702_var3 import net_0702_var3
 from .net_0702_var4 import net_0702_var4
 from .net_0702_var5 import net_0702_var5
 from .net_0705 import net_0705
+from .net_0705_var2 import net_0705_var2
+from .net_0705_var3 import net_0705_var3
 
 
 def getScheduler(optimizer, config):
@@ -277,11 +279,20 @@ def getNet(netType):
         return net_0702_var4(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
     elif (netType == 'net_0702_var5'):
         return net_0702_var5(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
+    
     # =========================================================
-
     elif (netType == 'net_0705'):
         return net_0705(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=8, DAM_denseLayer=5, num_head=4, n_MSRB=2, n_DAM=3, isFastmri=False)
+    elif (netType == 'net_0705_var1'):
+        return net_0705(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=8, DAM_denseLayer=3, num_head=4, n_MSRB=1, n_DAM=3, isFastmri=False)
+    elif (netType == 'net_0705_var3'):
+        return net_0705_var3(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=16, DAM_denseLayer=3, num_head=4, n_MSRB=1, n_DAM=3, isFastmri=False)
 
+    elif (netType == 'net_0705_var2'):
+        return net_0705_var2(img_size=256, indim=2, convDim=16, expand=2, edgeFeat=8, attdim=32, DAM_denseLayer=1, num_head=4, n_MSRB=2, n_DAM=1, isFastmri=False)
+
+
+    # =========================================================
     else:
         assert False,"Wrong net type"
 

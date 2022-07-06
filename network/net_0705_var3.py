@@ -22,7 +22,17 @@ class convBlock(nn.Module):
     """
     DAM + DC
     """
-    def __init__(self, indim=2, fNum=16, growthRate=16, layer=3, dilate=True, activation='ReLU', useOri=True, transition=0.5, isFastmri=True, n_DAM=3):
+    def __init__(self, 
+                indim=2, 
+                fNum=16, 
+                growthRate=16, 
+                layer=3, 
+                dilate=True, 
+                activation='GELU', 
+                useOri=False, 
+                transition=0.5,
+                isFastmri=True, 
+                n_DAM=3):
         
         super(convBlock, self).__init__()
         layers = []
@@ -43,11 +53,6 @@ class convBlock(nn.Module):
 
         return x1
 
-def default_conv(in_channels, out_channels, kernel_size, bias=True):
-    return nn.Conv2d(
-        in_channels, out_channels, kernel_size,
-        padding=(kernel_size//2), bias=bias)
-
 
 class MSRB(nn.Module):
     def __init__(self, n_feats, conv=default_conv):
@@ -61,8 +66,8 @@ class MSRB(nn.Module):
 
         self.conv_3_1 = conv(n_feats, n_feats, kernel_size_1)
         self.conv_3_2 = conv(n_feats * 2, n_feats * 2, kernel_size_1)
-        self.conv_5_1 = conv(n_feats, n_feats, kernel_size_2)
-        self.conv_5_2 = conv(n_feats * 2, n_feats * 2, kernel_size_2)
+        self.conv_5_1 = conv(n_feats, n_feats, kernel_size_1, dilate=2)
+        self.conv_5_2 = conv(n_feats * 2, n_feats * 2, kernel_size_1, dilate=2)
         self.confusion = nn.Conv2d(n_feats * 4, n_feats, 1, padding=0, stride=1)
         self.relu = nn.ReLU(inplace=True)
 
@@ -71,20 +76,23 @@ class MSRB(nn.Module):
         output_3_1 = self.relu(self.conv_3_1(input_1))
         output_5_1 = self.relu(self.conv_5_1(input_1))
         input_2 = torch.cat([output_3_1, output_5_1], 1)
+        
         output_3_2 = self.relu(self.conv_3_2(input_2))
         output_5_2 = self.relu(self.conv_5_2(input_2))
         input_3 = torch.cat([output_3_2, output_5_2], 1)
         output = self.confusion(input_3)
+
         output += x
+
         return output
 
 
 class Edge_Net(nn.Module):
     def __init__(self, indim, outdim, conv=default_conv, n_MSRB=3):
+        
         super(Edge_Net, self).__init__()
         
         kernel_size = 3
-        act = nn.ReLU(True)
         self.n_MSRB = n_MSRB 
        
         # head
@@ -95,9 +103,7 @@ class Edge_Net(nn.Module):
         for i in range(n_MSRB):
             modules_body.append(MSRB(outdim))
 
-        modules_tail = [
-            nn.Conv2d(outdim* (self.n_MSRB + 1), outdim, 1, padding=0, stride=1),
-            conv(outdim, indim, kernel_size)]
+        modules_tail = [nn.Conv2d(outdim* (self.n_MSRB + 1), outdim, 1, padding=0, stride=1), conv(outdim, indim, kernel_size)]
 
         self.Edge_Net_head = nn.Sequential(*modules_head)
         self.Edge_Net_body = nn.Sequential(*modules_body)
@@ -121,35 +127,6 @@ class Edge_Net(nn.Module):
         return (res, x)
 
 
-
-class edgeBlock(nn.Module):
-    def __init__(self, inFeat=1, outFeat=16, ks=3):
-        super(edgeBlock,self).__init__()
-        
-        # encode
-        self.conv1 = nn.Conv2d(inFeat, outFeat, kernel_size=3, padding = 1, stride=1) 
-        self.bn1 = nn.BatchNorm2d(outFeat)
-        self.act1 = nn.ReLU()
-        
-        # decode part
-        self.conv2 = nn.Conv2d(outFeat, inFeat, kernel_size=1, stride=1) 
-        self.bn2 = nn.BatchNorm2d(inFeat)
-        self.act2 = nn.ReLU()
-
-
-    def forward(self, x):
-
-        # encode
-        x1 = self.conv1(x)
-        x1 = self.bn1(x1)
-        x1 = self.act1(x1)
-
-        # decode
-        x2 = self.conv2(x1)
-        x2 = self.bn2(x2)
-        x2 = self.act2(x2)
-
-        return (x1,x2)
 
 #============================== #============================== #============================== #============================== 
 
@@ -203,30 +180,6 @@ class attHead1(nn.Module):
 
         return x1
 
-
-class attHead2(nn.Module):
-    """
-    norm + 3*3 dconv
-    """
-    
-    def __init__(self, C, C1, layernorm_type= 'BiasFree', bias=False):
-        """
-        C: input channel 
-        C1: output channel after 1*1 conv
-
-        """
-        super(attHead2,self).__init__()
-        self.norm = LayerNorm(C, layernorm_type)
-        #self.conv = nn.Conv2d(C, C1, kernel_size=3, stride=1, padding=1, groups=C1, bias=bias)
-
-    def forward(self, x):
-        """
-        x: (B, C, H, W)
-        """ 
-        x1 = self.norm(x) #(B, H, W, C)
-        #x1 = self.conv(x1)  #(B, C1, H, W)
-
-        return x1
 
 
 
@@ -301,7 +254,6 @@ class EEM(nn.Module):
         #x = self.imhead1(x) 
         
         B, C, H, W = x.shape    
-        
         h_group, w_group = H // self.ws, W // self.ws
         total_groups = h_group * w_group
         x = x.reshape(B, h_group, self.ws, w_group, self.ws, C).transpose(2, 3) #(B, h_group, w_group, self.ws, self.ws, C)
@@ -400,7 +352,7 @@ class attBlock(nn.Module):
         return x1
 
 
-class net_0705(nn.Module):
+class net_0705_var3(nn.Module):
     """
     12 DAM + transformer block
     """
@@ -424,7 +376,7 @@ class net_0705(nn.Module):
             n_RDB: number of RDBs 
 
         """
-        super(net_0705, self).__init__()
+        super(net_0705_var3, self).__init__()
         
         # image module
         self.steam = convBlock(indim=indim, fNum=convDim, growthRate=growthRate, layer=DAM_denseLayer, dilate=True, isFastmri=isFastmri, n_DAM=n_DAM)
