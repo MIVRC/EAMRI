@@ -41,9 +41,14 @@ from .net_0702_var2 import net_0702_var2
 from .net_0702_var3 import net_0702_var3 
 from .net_0702_var4 import net_0702_var4
 from .net_0702_var5 import net_0702_var5
+from .net_0706 import net_0706, Edge_Net
 from .net_0705 import net_0705
 from .net_0705_var2 import net_0705_var2
 from .net_0705_var3 import net_0705_var3
+
+from .net_0707 import net_0707
+from .net_0707_var1 import net_0707_var1
+from .net_0707_var2 import net_0707_var2
 
 
 def getScheduler(optimizer, config):
@@ -279,7 +284,28 @@ def getNet(netType):
         return net_0702_var4(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
     elif (netType == 'net_0702_var5'):
         return net_0702_var5(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    
+   
+    #==================
+    # test
+    elif (netType == 'net_0706'):
+        return net_0706(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,3,1], num_head=4, layers=[4,4,4,4], isFastmri=False)
+    elif (netType == 'net_0706_var1'):
+        return net_0706(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[2,2,6,2], num_head=4, layers=[4,4,4,4], isFastmri=False)
+    elif (netType == 'net_0706_var2'):
+        return net_0706(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[2,2,6,2], num_head=4, layers=[3,3,4,3], isFastmri=False)
+
+    # =========================================================
+    elif (netType == 'net_0707'):
+        return net_0707(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,3,1], num_head=4, layers=[3,3,4,3], num_iters=[3,3,1,3], isFastmri=False)
+    elif (netType == 'net_0707_var1'):
+        return net_0707_var1(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=False)
+    elif (netType == 'net_0707_var2'):
+        return net_0707_var2(img_size=256, indim=2, edgeFeat=12, attdim=16, n_DAMs=[1,5,5,5], num_head=4, fNums=[64,64,64,64], num_iters=[1,1,1,1], isFastmri=False)
+
+
+    elif (netType == 'edge'):
+        return Edge_Net(indim=2, hiddim=8, n_MSRB=2)
+
     # =========================================================
     elif (netType == 'net_0705'):
         return net_0705(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=8, DAM_denseLayer=5, num_head=4, n_MSRB=2, n_DAM=3, isFastmri=False)
@@ -287,7 +313,6 @@ def getNet(netType):
         return net_0705(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=8, DAM_denseLayer=3, num_head=4, n_MSRB=1, n_DAM=3, isFastmri=False)
     elif (netType == 'net_0705_var3'):
         return net_0705_var3(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=16, DAM_denseLayer=3, num_head=4, n_MSRB=1, n_DAM=3, isFastmri=False)
-
     elif (netType == 'net_0705_var2'):
         return net_0705_var2(img_size=256, indim=2, convDim=16, expand=2, edgeFeat=8, attdim=32, DAM_denseLayer=1, num_head=4, n_MSRB=2, n_DAM=1, isFastmri=False)
 

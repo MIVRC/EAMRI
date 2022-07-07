@@ -8,7 +8,9 @@ from einops import rearrange
 import numbers
 from torch.nn.parameter import Parameter
 from fastmri.data import transforms_simple as T
+from .ESP_module import EESP
 import pdb
+
 
 
 #=================================================================
@@ -691,10 +693,9 @@ class denseConv(nn.Module):
         else:
             dilateMulti = 1
         pad = int((kernelSize-1)/2)
-        #self.denselayer = layer-2
         self.denselayer = layer
         templayerList = []
-        for i in range(0, self.denselayer):
+        for i in range(0, self.denselayer): #0,1
             if(useOri):
                 tempLayer = denseBlockLayer_origin(inChannel=inChannel+growthRate*i, 
                                             outChannel=growthRate,
@@ -716,40 +717,6 @@ class denseConv(nn.Module):
             
         return x.contiguous()
 
-
-
-class DAM1(nn.Module):
-    '''
-    basic DAM module 
-    '''
-    def __init__(self, inChannel = 2, fNum = 16, growthRate = 16, layer = 3, dilate = False, activation = 'ReLU', useOri = False, transition = 0):
-        super(DAM1, self).__init__()
-        self.inChannel = inChannel
-        self.outChannel = fNum  
-        self.transition = transition
-        self.inConv = nn.Conv2d(self.inChannel, fNum, 3, padding = 1) # (16,2,3,3)
-        if(activation == 'LeakyReLU'):
-            self.activ = nn.LeakyReLU()
-        elif(activation == 'ReLU'):
-            self.activ = nn.ReLU()
-        
-        self.denseConv = denseConv(fNum, 3, growthRate, layer - 2, dilationLayer = dilate, activ = activation, useOri = useOri)
-        
-        if(transition>0):
-            self.transitionLayer = transitionLayer(fNum+growthRate*(layer-2), transition, activ = activation)
-            self.outConv = convLayer(int((fNum+growthRate*(layer-2))*transition), self.outChannel, activ = activation)
-        else:
-            self.outConv = convLayer(fNum+growthRate*(layer-2), self.outChannel, activ = activation)
-
-
-    def forward(self, x):
-
-        x1 = self.inConv(x) #[16,16,3,3]
-        x2 = self.denseConv(x1) #(8,64,256,256)
-        x2 = self.transitionLayer(x2) #(8,32,256,256)
-        xout = self.outConv(x2) + x1 #(8,16,256,256)
-
-        return xout
 
 
 
@@ -814,6 +781,59 @@ class DAM(nn.Module):
             x2 = x2+x[:,:self.outChannel]
 
         return x2
+
+
+
+
+class ESP_DAM(nn.Module):
+    '''
+    ESP DAM module 
+    '''
+    def __init__(self, 
+                inChannel = 2, 
+                fNum = 16, 
+                scale=2,
+                k=4,
+                activation = 'ReLU', 
+                residual = True):
+
+
+        super(ESP_DAM, self).__init__()
+        self.inChannel = inChannel
+        self.outChannel = inChannel
+        self.residual = residual
+
+        self.inConv = nn.Conv2d(self.inChannel, fNum, 3, padding = 1, bias=True) # (16,2,3,3)
+
+        if(activation == 'LeakyReLU'):
+            self.activ = nn.LeakyReLU()
+        elif(activation == 'ReLU'):
+            self.activ = nn.ReLU()
+        elif(activation == 'GELU'):
+            self.activ = nn.GELU()
+        
+        assert (fNum//scale) // k > 0, "nOut in EESP should be larger than k!"
+        self.espConv = EESP(fNum, fNum//scale)
+        self.outConv = convLayer(fNum//scale, self.outChannel, activ = activation)
+
+
+    def forward(self, x):
+
+        x2 = self.inConv(x) #[B,16,H,W]
+        x2 = self.espConv(x2) #(B, 8, H, W)
+        x2 = self.outConv(x2) #(8,2,256,256)
+    
+        if(self.residual):
+            x2 = x2+x[:,:self.outChannel]
+
+        return x2
+
+
+
+
+
+
+
 
 
 #===========================================================================================
@@ -1118,7 +1138,7 @@ class transitionLayer(nn.Module):
     def forward(self,x):
         x1 = self.bn(x)
         x2 = self.relu(x1)
-        y = self.conv(x2)
+        y = self.conv(x2) # 1*1 conv
         
         return y
 
