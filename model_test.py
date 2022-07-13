@@ -5,7 +5,7 @@ from torch.utils.data import DataLoader
 from collections import defaultdict
 import numpy as np
 from fastmri import evaluate
-from dataloader import handle_output, fastmri_format
+from dataloader import handle_output, dataFormat 
 import h5py
 from network import Get_gradient
 from tqdm import tqdm
@@ -60,13 +60,13 @@ def test_save_result_per_slice(model, data_loader, args):
             mean = mean.unsqueeze(1).unsqueeze(2).to(args.device)
             std = std.unsqueeze(1).unsqueeze(2).to(args.device)
             
-            #input = fastmri_format(input) * std
+            #input = dataFormat(input) * std
             if args.dataMode == 'complex':
-                output =  fastmri_format(output) /1e6
+                output =  dataFormat(output) /1e6
                 target = target /1e6
 
             elif args.dataMode == 'real':
-                output =  fastmri_format(output) * std + mean
+                output =  dataFormat(output) * std + mean
                 target = target * std + mean
 
             output = output.detach().cpu().numpy()             
@@ -90,7 +90,9 @@ def test_save_result_per_volume(model, data_loader, args):
     """
     calculate metrics per volume
     """ 
-    model.eval()
+    if model is not None:
+        model.eval()
+
     test_logs =[]
     start = time.perf_counter()
     with torch.no_grad():
@@ -101,35 +103,44 @@ def test_save_result_per_volume(model, data_loader, args):
             target = target.to(args.device, dtype=torch.float)
             subF = subF.to(args.device, dtype=torch.float)
             mask_val = mask_val.to(args.device, dtype=torch.float)
+            maxval = maxval.to(args.device, dtype=torch.float)
+            mean = mean.to(args.device, dtype=torch.float)
+            std = std.to(args.device, dtype=torch.float)
 
-            output = model(input, subF, mask_val)
+            if args.dev != 1:
+                output = model(input, subF, mask_val)
+            else:
+                output = input
+
             output = handle_output(output, 'test')
-            mean = mean.unsqueeze(1).unsqueeze(2).to(args.device, dtype=torch.float)
-            std = std.unsqueeze(1).unsqueeze(2).to(args.device, dtype=torch.float)
            
             if args.dataName == 'fastmri':
-
                 if args.dataMode == 'complex':
-                    input = fastmri_format(input) /1e6
-                    if args.dev == 1:
-                        output = input
-                    else:
-                        output =  fastmri_format(output) /1e6
+                    input = dataFormat(input) /1e6
+                    output =  dataFormat(output) /1e6
                     target = target /1e6
 
                 elif args.dataMode == 'real':
+                    mean = mean.view(-1,1,1)
+                    std = std.view(-1,1,1)
                     input = input * std + mean
-                    output =  fastmri_format(output) * std + mean
+                    output =  dataFormat(output) * std + mean
                     target = target * std + mean
 
             elif args.dataName == 'cc359':
-                if args.dataMode == 'complex':
-                    input = fastmri_format(input) * 1e5
-                    if args.dev == 1:
-                        output = input 
-                    else:
-                        output =  fastmri_format(output) * 1e5
+                assert args.dataMode != 'real', "no real mode for cc359!"
+
+                if args.challenge == 'singlecoil':
+                    input = dataFormat(input) * 1e5
+                    output =  dataFormat(output) * 1e5
                     target = target * 1e5
+                
+                else: #multicoil
+                    input = dataFormat(input) * maxval.view(-1,1,1)
+                    output = dataFormat(output) * maxval.view(-1,1,1) 
+                    target = target * maxval.view(-1,1,1)
+
+
             else:
                 raise NotImplementedError('Please provide correct dataset name: fastmri or cc359')
 
@@ -137,7 +148,7 @@ def test_save_result_per_volume(model, data_loader, args):
             test_logs.append({
                 'fname': fname,
                 'slice': slice,
-                'maxval': maxval,
+                'maxval': maxval.cpu().detach().numpy(),
                 'output': output.cpu().detach().numpy(),
                 'target': target.cpu().detach().numpy(),
                 'input': input.cpu().detach().numpy(),
@@ -158,25 +169,16 @@ def test_save_result_per_volume(model, data_loader, args):
                 targets[fname].append((slice, log['target'][i]))
                 inputs[fname].append((slice, log['input'][i]))
                 maxvals[fname].append((slice, log['maxval'][i]))
-                
-        
-        metrics = dict(val_loss=losses, nmse=[], rmse=[], ssim=[], psnr=[])
-        outputs_save = defaultdict(list)
-        targets_save = defaultdict(list)
 
-        '''
-        for fname in outputs:
-            outputs_save[fname] = np.stack([out for _, out in sorted(outputs[fname])])
-            targets_save[fname] = np.stack([tgt for _, tgt in sorted(targets[fname])])
-            inputs[fname] = np.stack([tgt for _, tgt in sorted(inputs[fname])])
-        '''
+         
+        metrics = dict(val_loss=losses, nmse=[], rmse=[], ssim=[], psnr=[])
 
         for fname in outputs:
             output = np.stack([out for _, out in sorted(outputs[fname])])
             target = np.stack([tgt for _, tgt in sorted(targets[fname])])
-            maxval_volume = np.stack([temp for _, temp in sorted(maxvals[fname])])[0]
+            maxval_volume = np.max(np.stack([temp for _, temp in sorted(maxvals[fname])]))
 
-            if args.dataName == 'cc359':
+            if args.dataName == 'cc359': 
                 maxval_volume = None
 
             metrics['nmse'].append(evaluate.nmse(target, output))
@@ -186,13 +188,8 @@ def test_save_result_per_volume(model, data_loader, args):
 
         metrics = {metric: np.mean(values) for metric, values in metrics.items()}
         torch.cuda.empty_cache()
+
         return metrics['nmse'], metrics['rmse'], metrics['psnr'], metrics['ssim'], time.perf_counter()-start 
-
-
-        #save_reconstructions(outputs_save, args.save_dir /'reconstructions')
-        #save_reconstructions(targets_save, args.save_dir /'gt')
-        #save_reconstructions(inputs, args.save_dir /'input')
-
 
 
 def test_save_result_per_volume_edge(model, data_loader, args):
@@ -223,21 +220,21 @@ def test_save_result_per_volume_edge(model, data_loader, args):
             
             if args.dataName == 'fastmri':
                 if args.dataMode == 'complex' or args.dataMode == 'complex_edge':
-                    input = fastmri_format(input) /1e6
-                    output =  fastmri_format(output) /1e6
+                    input = dataFormat(input) /1e6
+                    output =  dataFormat(output) /1e6
                     target = target /1e6
                 elif args.dataMode == 'real':
                     input = input * std + mean
-                    output =  fastmri_format(output) * std + mean
+                    output =  dataFormat(output) * std + mean
                     target = target * std + mean
 
             elif args.dataName == 'cc359':
                 if args.dataMode == 'complex' or args.dataMode == 'complex_edge':
-                    input = fastmri_format(input) * 1e5
+                    input = dataFormat(input) * 1e5
                     if args.dev == 1:
                         output = input 
                     else:
-                        output =  fastmri_format(output) * 1e5
+                        output =  dataFormat(output) * 1e5
                     target = target * 1e5
                 else:
                     raise NotImplementedError("Do not have real dataMode for cc359 dataset!")
@@ -268,10 +265,8 @@ def test_save_result_per_volume_edge(model, data_loader, args):
                 inputs[fname].append((slice, log['input'][i]))
                 maxvals[fname].append((slice, log['maxval'][i]))
                 
-        
+
         metrics = dict(val_loss=losses, nmse=[], ssim=[], psnr=[])
-        outputs_save = defaultdict(list)
-        targets_save = defaultdict(list)
 
         for fname in outputs:
             output = np.stack([out for _, out in sorted(outputs[fname])])

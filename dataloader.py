@@ -15,10 +15,12 @@ from torch.utils.data import DataLoader
 from fastmri.data import transforms_simple as transforms
 from torch.utils.data import Dataset
 from cardiac_dataloader import SliceData_cardiac
+from cc359_multicoil_dataloader import SliceData_cc359_multicoil
 
 
 class MaskFunc:
     """
+    Cartesian masking
     MaskFunc creates a sub-sampling mask of a given shape.
     The mask selects a subset of columns from the input k-space data. If the k-space data has N
     columns, the mask picks out:
@@ -189,6 +191,8 @@ class SliceData_cc359(Dataset):
 
 
 
+#======================================================================================
+# DataTransform
 
 class DataTransform_real_fastmri:
     """
@@ -401,9 +405,6 @@ class DataTransform_complex_fastmri_recon:
         zim = zim.permute(2,0,1)
 
         return zim, target, masked_kspace, mask, mean, mean, attrs['max'].astype(np.float32), fname, slice
-
-
-
 
 
 
@@ -698,12 +699,17 @@ class DataTransform_complex_cc359_edge:
 
 
 
-
-
-
-
-def create_datasets(dataName, dataMode, train_root, valid_root, center_fractions, 
-                accelerations, resolution, sample_rate,challenge='singlecoil'):
+def create_datasets(
+                    dataName, 
+                    dataMode, 
+                    train_root, 
+                    valid_root, 
+                    center_fractions, 
+                    accelerations, 
+                    resolution, 
+                    sample_rate,
+                    challenge='singlecoil'
+                    ):
 
     """
     create dataset, support cardiac, fastmri or cc359 dataset
@@ -729,7 +735,16 @@ def create_datasets(dataName, dataMode, train_root, valid_root, center_fractions
         # use fastmri masking function
         train_mask = MaskFunc(center_fractions, accelerations)
         dev_mask = MaskFunc(center_fractions, accelerations)
+
+        # ===========================================
+        # fastmri 
+        # ===========================================
         if dataName == 'fastmri':
+
+            # ===========================================
+            # singlecoil
+            # ===========================================
+
             if challenge == 'singlecoil':
                 if dataMode == 'real':
                     dt = DataTransform_real_fastmri # for unet
@@ -757,24 +772,56 @@ def create_datasets(dataName, dataMode, train_root, valid_root, center_fractions
                 skip_head=0
             )
         
+        # ===========================================
+        # cc359
+        # ===========================================
         elif dataName == 'cc359':
-            if dataMode == 'complex':
-                dt = DataTransform_complex_cc359
-            elif dataMode == 'complex_edge':
-                dt = DataTransform_complex_cc359_edge
-            else:
-                raise NotImplementedError("Only support real/complex/complex_edge dataMode in fastmri dataloader")
 
-            train_data = SliceData_cc359(
-                root=train_root, 
-                transform=dt(train_mask),
-                sample_rate=sample_rate,
-            )
-            dev_data = SliceData_cc359(
-                root=valid_root, 
-                transform=dt(dev_mask, use_seed=True),
-                sample_rate=sample_rate,
-            )
+            # ===========================================
+            # singlecoil
+            # ===========================================
+
+            if challenge == 'singlecoil':
+                if dataMode == 'complex':
+                    dt = DataTransform_complex_cc359
+                elif dataMode == 'complex_edge':
+                    dt = DataTransform_complex_cc359_edge
+                else:
+                    raise NotImplementedError("Only support real/complex/complex_edge dataMode in fastmri dataloader")
+
+                train_data = SliceData_cc359(
+                    root=train_root, 
+                    transform=dt(train_mask),
+                    sample_rate=sample_rate,
+                )
+                dev_data = SliceData_cc359(
+                    root=valid_root, 
+                    transform=dt(dev_mask, use_seed=True),
+                    sample_rate=sample_rate,
+                )
+
+            # ===========================================
+            # multicoil 
+            # ===========================================
+            elif challenge == 'multicoil':
+                train_data = SliceData_cc359_multicoil(
+                    root=train_root,
+                    crop=(30,30), 
+                    center_fractions=center_fractions,
+                    accelerations=accelerations,
+                    shuffle=True,
+                    is_train=True,
+                    dataMode=dataMode,
+                )
+                dev_data = SliceData_cc359_multicoil(
+                    root=valid_root,
+                    crop=(30,30), 
+                    center_fractions=center_fractions,
+                    accelerations=accelerations,
+                    shuffle=False,
+                    is_train=False,
+                    dataMode=dataMode,
+                )
 
 
     return dev_data, train_data
@@ -782,28 +829,43 @@ def create_datasets(dataName, dataMode, train_root, valid_root, center_fractions
 
 
 
-
-
-
-def fastmri_format(x): 
-    if x.shape[1] == 1:
+def dataFormat(x): 
+    if len(x.shape) == 3:
+        return x 
+    elif x.shape[1] == 1: #(B,1,H,W)
         x = x.squeeze(1)
-    elif x.shape[1] == 2: # take modules
-        x = ((x** 2).sum(dim=1) + 0.0).sqrt()
-    else: #multi-coil
-        bs = len(x)
-        x = x.reshape(bs,-1,320,320,2) #(B,C,H,W,2)
-        x = ((x**2).sum(dim=-1) + 0.0).sqrt() #(B,C,H,W)
-        x = ((x**2).sum(dim=1) + 0.0).sqrt()
+    elif x.shape[1] == 2: #single coil (B,2,H,W)
+        x = (x**2).sum(dim=1).sqrt()
+    else: #(B,C,H,W)
+        assert len(x.shape) == 4, "dataFormat do not support dynamic MRI"
+        B, C, H, W = x.shape
+        x = x.reshape(B,-1,H,W,2)
+        x = (x**2).sum(dim=-1).sqrt() #(B,-1, H, W)
+        x = ((x**2).sum(dim=1)).sqrt() #(B,H,W)
 
     return x
 
 
 
-def getDataloader(dataName, dataMode, batch_size, center_fractions, accelerations, resolution, train_root, valid_root, sample_rate=1, challenge='singlecoil'): 
+def getDataloader(
+                    dataName, 
+                    dataMode, 
+                    batch_size, 
+                    center_fractions, 
+                    accelerations, 
+                    resolution, 
+                    train_root, 
+                    valid_root, 
+                    sample_rate=1, 
+                    challenge='singlecoil'
+                ): 
 
+    # create slice dataset
     dev_data, train_data = create_datasets(dataName, dataMode, train_root, valid_root, center_fractions, accelerations, resolution, sample_rate, challenge)
 
+    # ================================
+    # train
+    # ================================
     train_loader = DataLoader(
         dataset=train_data,
         batch_size=batch_size,
@@ -811,6 +873,11 @@ def getDataloader(dataName, dataMode, batch_size, center_fractions, acceleration
         num_workers=8,
         pin_memory=True,
     )
+
+    # ================================
+    # valid
+    # ================================
+
     if dataName != 'cardiac':
         dev_loader = DataLoader(
             dataset=dev_data,

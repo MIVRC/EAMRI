@@ -4,26 +4,14 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 import torch.optim as optim
 from .networkUtil import *
-from .CNN import Unet_dc
+from .Unet import Unet_dc
 from .unet_fastmri import UnetModel
 from .RDN_complex import RDN_complex
-from .DC_CNN import DC_CNN
+from .DC_CNN import DC_CNN, DC_CNN_multicoil
 from .cascadeNetwork import CN_Dense
 from .SEN_MRI import WAS 
 from .zero_filled_model import ZF
 from .md_recon import MRIReconstruction as mdr
-
-#from .cascaded_edgeNet import casEdgeNet, net_0426 
-#from .Recurrent_Transformer import ReconFormer
-#from .casFormer import casFormer
-#from .edgeFormer_0413 import edgeFormer_0413 
-
-#from .convTranNet_0523 import convTranNet_0523, convTranNet_0523_baseline, convTranNet_0523_var1, convTranNet_0523_var2, convTranNet_0523_var3, convTranNet_0523_var4
-#from .convTranNet_0529 import convTranNet_0529, convTranNet_0529_var1, convTranNet_0529_var2, convTranNet_0529_debug, convTranNet_0529_var3
-
-#from .convTranNet_0531 import convTranNet_0531, convTranNet_0531_var1, convTranNet_0531_var2, convTranNet_0531_debug
-
-#from .convTranNet_0601 import convTranNet_0601, convTranNet_0601_debug, convTranNet_0601_var1, convTranNet_0601_debug2
 
 from .net_0621 import net_0621
 #from .net_0621_var1 import net_0621_var1
@@ -49,7 +37,7 @@ from .net_0705_var3 import net_0705_var3
 from .net_0707 import net_0707
 from .net_0707_var1 import net_0707_var1
 from .net_0707_var2 import net_0707_var2
-
+from .net_0707_var3 import net_0707_var3
 
 def getScheduler(optimizer, config):
 
@@ -82,12 +70,11 @@ def getNet(netType):
         return DC_CNN(isFastmri=False)
     elif(netType == 'DCCNN_fastmri'):
         return DC_CNN(isFastmri=True)
-
-    elif(netType == 'DCCNN_f16'):
-        return DC_CNN(fNum=16)
-    elif(netType == 'DCCNN_f64'):
-        return DC_CNN(fNum=64)
-    
+    elif(netType == 'DCCNN_fastmri_multicoil'):
+        return DC_CNN_multicoil(indim=30, fNum=96, isFastmri=True, isMulticoil=True)
+    elif(netType == 'DCCNN_cc359_multicoil'):
+        return DC_CNN_multicoil(indim=24, fNum=96, isFastmri=False, isMulticoil=True)
+   
     #===========RDN===============
     elif(netType == 'RDN_complex_DC'):
         return RDN_complex(dcLayer = 'DC', isFastmri=False)
@@ -123,7 +110,9 @@ def getNet(netType):
     elif(netType == 'Unet_fastmri_real'):
         return UnetModel(in_chans=1, out_chans=1, chans=32, num_pool_layers=4, drop_prob=0.0)
 
-    elif(netType == 'Unet_dc_multicoil'):
+    elif(netType == 'Unet_dc_multicoil_cc359'):
+        return Unet_dc(indim=24, isFastmri=False, isMulticoil=True)
+    elif(netType == 'Unet_dc_multicoil_fastmri'):
         return Unet_dc(indim=30, isFastmri=True, isMulticoil=True)
 
     #===========mdr============
@@ -148,71 +137,7 @@ def getNet(netType):
         return edgeFormer_0413(in_channels=2, out_channels=2, num_ch=(36,48,48,96), down_scales=(2,1,1,1.5), img_size=320, num_heads=(6,6,6,6), depths=(3,3,9,3), window_sizes=(8,8,8,8), mlp_ratio=2., resi_connection='1conv', use_checkpoint=(False,False, False, False))
 
 
-    #===========convTransNet============
-    elif (netType == 'convTranNet_0523_fastmri'):
-        return convTranNet_0523(img_size=320, C=3, G0=2, G1=16, n_RDB=4, nf=36, num_head=6, depth=6, window_size=8, isFastmri=True)
 
-    elif (netType == 'convTranNet_0523'):
-        return convTranNet_0523(img_size=256, C=6, G0=2, G1=32, n_RDB=6, nf=36, num_head=3, depth=2, window_size=8, isFastmri=False)
-
-
-    elif (netType == 'convTranNet_0523_var1'):
-        return convTranNet_0523_var1(img_size=256, C=6, G0=2, G1=32, n_RDB=6, nf=36, num_head=3, depth=2, window_size=8, isFastmri=False)
-
-
-    elif (netType == 'convTranNet_0523_var2'):
-        return convTranNet_0523_var2(img_size=256, C=6, G0=2, G1=32, n_RDB=6, nf=36, num_head=3, depth=2, window_size=8, isFastmri=False)
-
-
-    elif (netType == 'convTranNet_0523_var3'):
-        return convTranNet_0523_var3(img_size=256, C=6, G0=2, G1=32, n_RDB=6, nf=36, num_head=3, depth=2, window_size=8, n_DAM=6, isFastmri=False)
-
-    elif (netType == 'convTranNet_0523_var4'):
-        return convTranNet_0523_var4(img_size=256, C=6, G0=2, G1=32, n_RDB=6, nf=36, num_head=3, depth=2, window_size=8, n_DAM=3, isFastmri=False)
-
-
-    elif (netType == 'convTranNet_0523_baseline'):
-        return convTranNet_0523_baseline(img_size=256, C=6, G0=2, G1=32, n_RDB=6, nf=36, num_head=3, depth=2, window_size=8, isFastmri=False)
-
-    elif (netType == 'convTranNet_0529'):
-        return convTranNet_0529(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-
-    elif (netType == 'convTranNet_0529_debug'):
-        return convTranNet_0529_debug(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-    elif (netType == 'convTranNet_0529_ex2'):
-        return convTranNet_0529(img_size=256, indim=2, outdim=64, num_head=8, n_DAM=3, isFastmri=False)
-
-
-    elif (netType == 'convTranNet_0529_var1'):
-        return convTranNet_0529_var1(img_size=256, indim=2, fNum=16, outdim=32, num_head=4, isFastmri=False)
-
-    elif (netType == 'convTranNet_0529_var2'):
-        return convTranNet_0529_var2(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-    elif (netType == 'convTranNet_0529_var3'):
-        return convTranNet_0529_var3(img_size=256, indim=2, outdim=64, num_head=8, n_DAM=3, isFastmri=False)
-
-    elif (netType == 'convTranNet_0531'):
-        return convTranNet_0531(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-    elif (netType == 'convTranNet_0531_debug'):
-        return convTranNet_0531_debug(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-
-    elif (netType == 'convTranNet_0531_ex2'):
-        return convTranNet_0531(img_size=256, indim=2, outdim=12, num_head=1, n_DAM=3, isFastmri=False)
-
-
-    elif (netType == 'convTranNet_0531_var1'):
-        return convTranNet_0531_var1(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-    elif (netType == 'convTranNet_0531_var2'):
-        return convTranNet_0531_var2(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-
-    # =========================================================
     elif (netType == 'convTranNet_0601'):
         return convTranNet_0601(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
 
@@ -301,6 +226,10 @@ def getNet(netType):
         return net_0707_var1(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=False)
     elif (netType == 'net_0707_var2'):
         return net_0707_var2(img_size=256, indim=2, edgeFeat=12, attdim=16, n_DAMs=[1,5,5,5], num_head=4, fNums=[64,64,64,64], num_iters=[1,1,1,1], isFastmri=False)
+    elif (netType == 'net_0707_var3'):
+        return net_0707_var3(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=False)
+    elif (netType == 'net_0707_var3_fastmri'):
+        return net_0707_var3(img_size=320, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=True)
 
 
     elif (netType == 'edge'):

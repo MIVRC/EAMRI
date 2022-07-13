@@ -22,6 +22,7 @@ try: #<= pytorch 1.7.0
 
 except AttributeError: #>= pytorch 1.8.0
     # Forwards compatibility for new pytorch versions
+    # signal_ndim is compatible with pt1.7 
     def fft(input, signal_ndim, normalized=True):
         return torch.view_as_real(torch.fft.fft2(
             torch.view_as_complex(input),
@@ -96,35 +97,22 @@ def ifftshift(x, dim=None):
     return roll(x, shift, dim)
 
 
-def ifft2(data: torch.Tensor, norm: str = "ortho") -> torch.Tensor:
+def ifft2(data, normalized=True, shift=True):
     """
-    original ifft2c_old
-    Apply centered 2-dimensional Inverse Fast Fourier Transform.
-
-    Args:
-        data: Complex valued input data containing at least 3 dimensions:
-            dimensions -3 & -2 are spatial dimensions and dimension -1 has size
-            2. All other dimensions are assumed to be batch dimensions.
-        norm: Whether to include normalization. Must be one of ``"backward"``
-            or ``"ortho"``. See ``torch.fft.ifft`` on PyTorch 1.9.0 for
-            details.
-
-    Returns:
-        The IFFT of the input.
+    data: (H, W, 2) or (B, H, W, 2)
     """
     if not data.shape[-1] == 2:
         raise ValueError("Tensor does not have separate complex dim.")
-    if norm not in ("ortho", "backward"):
-        raise ValueError("norm must be 'ortho' or 'backward'.")
-    normalized = True if norm == "ortho" else False
-
-    data = ifftshift(data, dim=[-3, -2])
+    if shift:
+        data = ifftshift(data, dim=[-3, -2])
     data = ifft(data, 2, normalized=normalized)
-    data = fftshift(data, dim=[-3, -2])
+    if shift:
+        data = fftshift(data, dim=[-3, -2])
+
     return data
 
 
-def fft2(data, normalized=True):
+def fft2(data, normalized=True, shift=True):
     """
     Apply centered 2 dimensional Fast Fourier Transform.
     Args:
@@ -135,9 +123,11 @@ def fft2(data, normalized=True):
         torch.Tensor: The FFT of the input.
     """
     assert data.size(-1) == 2
-    data = ifftshift(data, dim=(-3, -2))
+    if shift:
+        data = ifftshift(data, dim=(-3, -2))
     data = fft(data, 2, normalized=normalized)
-    data = fftshift(data, dim=(-3, -2))
+    if shift:
+        data = fftshift(data, dim=(-3, -2))
     return data
 
 
@@ -222,42 +212,6 @@ def apply_mask(
 
     masked_data = data * mask + 0.0  # the + 0.0 removes the sign of the zeros
     return masked_data, mask
-
-
-def apply_mask_toy(
-    data: torch.Tensor,
-    mask_func: MaskFunc,
-    seed: Optional[Union[int, Tuple[int, ...]]] = None,
-    padding: Optional[Sequence[int]] = None,
-) -> Tuple[torch.Tensor, torch.Tensor]:
-    """
-    Subsample given k-space by multiplying with a mask.
-
-    Args:
-        data: The input k-space data. This should have at least 3 dimensions,
-            where dimensions -3 and -2 are the spatial dimensions, and the
-            final dimension has size 2 (for complex values). #(bs, h, w, channels)
-        mask_func: A function that takes a shape (tuple of ints) and a random
-            number seed and returns a mask.
-        seed: Seed for the random number generator.
-        padding: Padding value to apply for mask.
-
-    Returns:
-        tuple containing:
-            masked data: Subsampled k-space data
-            mask: The generated mask
-    """
-    shape = np.array(data.shape)
-    shape[:-3] = 1
-    mask = mask_func(shape, seed)
-    mask = mask.permute(1,0,2)
-    if padding is not None:
-        mask[:, :, : padding[0]] = 0
-        mask[:, :, padding[1] :] = 0  # padding value inclusive on right of zeros
-
-    masked_data = data * mask + 0.0  # the + 0.0 removes the sign of the zeros
-    return masked_data, mask
-
 
 
 

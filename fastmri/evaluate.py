@@ -37,6 +37,7 @@ def psnr(
     """Compute Peak Signal to Noise Ratio metric (PSNR)"""
     if maxval is None:
         maxval = gt.max()
+
     return peak_signal_noise_ratio(gt, pred, data_range=maxval)
 
 
@@ -49,14 +50,13 @@ def ssim(
     if not gt.ndim == pred.ndim:
         raise ValueError("Ground truth dimensions does not match pred.")
 
-    maxval = gt.max() if maxval is None else maxval
+    
+    if maxval is None:
+        maxval = gt.max()
 
     ssim = 0
     for slice_num in range(gt.shape[0]):
-        ssim = ssim + structural_similarity(
-            gt[slice_num], pred[slice_num], data_range=maxval
-        )
-
+        ssim = ssim + structural_similarity(gt[slice_num], pred[slice_num], data_range=maxval)
     return ssim / gt.shape[0]
 
 

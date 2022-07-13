@@ -81,6 +81,7 @@ class CNN(nn.Module):
         self.DC = dataConsistencyLayer(isStatic = True)
         
     def forward(self,x1,y,mask):
+
         x1 = self.block0(x1)
         x2 = self.block1(x1)
         x3 = self.down(x2)
@@ -97,7 +98,12 @@ class CNN(nn.Module):
         
         return result
 
+
+
 class Unet_dc(nn.Module):
+    """
+    unet padding version
+    """
     def __init__(self, indim=2, dilationLayer = False, isFastmri=False, isMulticoil=False):
         
         super(Unet_dc, self).__init__()
@@ -141,15 +147,21 @@ class Unet_dc(nn.Module):
         self.block2.add_module("conv_5", nn.Conv2d(64, indim, 1, padding=0))
         
         self.DC = dataConsistencyLayer_fastmri_m(isFastmri=isFastmri, isMulticoil=isMulticoil)
-        #self.DC = dataConsistencyLayer_iden()
 
 
-    def forward(self,x0,y,mask):
+    def forward(self,x,y,mask):
+        """
+        x0 : (B, 24, 218, 170)
+        """
+        # pad
+        
+        x0 = F.pad(x, (43,43,19,19)) #(B, 24, 256, 256) 
+
         x1 = self.block0(x0)
         x2 = self.block1(x1)
         x3 = self.down(x2)
         x4 = self.middle(x3)
-        
+       
         x5 = torch.cat((x3,x4),1)
         x6 = self.up(x5)
         
@@ -157,7 +169,11 @@ class Unet_dc(nn.Module):
         x8 = self.block2(x7)
         
         result = x8+x0
-
+        
+        # cropping
+        result = result[:,:,19:-19, 43:-43]
+        
+        # DC
         result = self.DC(result,y,mask)
         
         return result

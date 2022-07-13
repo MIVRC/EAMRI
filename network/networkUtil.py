@@ -1266,58 +1266,76 @@ class dataConsistencyLayer_fastmri_m(nn.Module):
         else:
             iScale = self.lamda/(1+self.lamda)
 
+        #=============================================
+        # reshape
+        #=============================================
         N = len(xin)
-        if(len(xin.shape)==4):
+        if(len(xin.shape)==4): #(B,C,H,W)
             if(xin.shape[1]==1):
                 emptyImag = torch.zeros_like(xin)
                 xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,1)
             else:
                 if not self.isMulticoil:
-                    xin_c = xin.permute(0,2,3,1) #(bs,h,w,2)
-        elif(len(xin.shape)==5):
+                    xin = xin.permute(0,2,3,1) #(bs,h,w,2)
+        
+        # dynamic MRI
+        elif(len(xin.shape)==5): 
+            assert True, "DC layer: not implement dynamic mri"
             if(xin.shape[1]==1):
                 emptyImag = torch.zeros_like(xin)
                 xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,4,1)
             else:
                 xin_c = xin.permute(0,2,3,4,1)
+
             mask = mask.reshape(mask.shape[0],mask.shape[1],mask.shape[2],mask.shape[3],1)
         else:
             assert False, "xin shape length has to be 4(2d) or 5(3d)"
         
-        if not self.isMulticoil: # singlecoil
+        #=============================================
+        # singlecoil 
+        #=============================================
+        if not self.isMulticoil: 
             if self.isFastmri: # fastmri
-                xin_f = T.fft2(xin_c,normalized=self.normalized)
+                xin_f = T.fft2(xin,normalized=self.normalized, shift=True)
                 xGT_f = y
                 xout_f = xin_f + (- xin_f + xGT_f) * iScale * mask
                 xout = T.ifft2(xout_f) 
 
             else: # for cc359 or cardiac
-                xin_f = T.fft(xin_c,2, normalized=self.normalized)
+                xin_f = T.fft2(xin,normalized=self.normalized, shift=False)
                 xGT_f = y
                 xout_f = xin_f + (- xin_f + xGT_f) * iScale * mask
-                xout = T.ifft(xout_f,2, normalized=self.normalized)
+                xout = T.ifft(xout_f,normalized=self.normalized, shift=False)
 
             if(len(xin.shape)==4):
-                xout = xout.permute(0,3,1,2)
+                xout = xout.permute(0,3,1,2) #(B, 2, H, W)
             else:
+                assert True, "DC layer: not implement dynamic mri"
                 xout = xout.permute(0,4,1,2,3)
             if(xin.shape[1]==1):
                 xout = torch.sqrt(xout[:,0:1]*xout[:,0:1]+xout[:,1:2]*xout[:,1:2])
 
-        else: #multicoil, xin_c (B,C,H,W)
-            xin_c = xin.reshape(N,-1,320,320,2) 
-            xin_f = T.fft2(xin_c,normalized=self.normalized)
+        #=============================================
+        # multicoil 
+        #=============================================
+        else: #xin_c (B,C,H,W)
+            B, C, H, W = xin.shape
+            xin_c = xin.reshape(N,-1,H,W,2) 
+            if self.isFastmri:
+                xin_f = T.fft2(xin_c,normalized=self.normalized, shift=True)
+            else:
+                xin_f = T.fft2(xin_c,normalized=self.normalized, shift=False)
+
             xGT_f = y
             xout_f = xin_f + (- xin_f + xGT_f) * iScale * mask
-            xout = T.ifft2(xout_f) 
-            xout = xout.reshape(N,-1,320,320)
+            if self.isFastmri:
+                xout = T.ifft2(xout_f, normalized=self.normalized, shift=True) 
+            else:
+                xout = T.ifft2(xout_f, normalized=self.normalized, shift=False) 
+
+            xout = xout.reshape(N,-1,H,W)
 
         return xout
-
-
-
-
-
 
 
 
