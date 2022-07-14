@@ -66,7 +66,7 @@ class DC_CNN_multicoil(nn.Module):
             templayerList.append(tmpDF)
         self.layerList = nn.ModuleList(templayerList)
         
-    def forward(self, x1, y, mask):
+    def forward(self, x1, y, mask, sens_map=None):
         xt = x1
         flag = True
         for layer in self.layerList:

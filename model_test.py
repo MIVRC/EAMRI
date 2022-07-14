@@ -35,6 +35,7 @@ def ssim(pred,gt,data_range):
     return measure.compare_ssim(gt[0], pred[0], data_range = data_range )
 
 
+
 def test_save_result_per_slice(model, data_loader, args):
     
     """
@@ -97,18 +98,24 @@ def test_save_result_per_volume(model, data_loader, args):
     start = time.perf_counter()
     with torch.no_grad():
         for idx, batch in enumerate(tqdm(data_loader)):
-            input, target, subF, mask_val, mean, std, maxval, fname, slice = batch
 
-            input = input.to(args.device, dtype=torch.float)
-            target = target.to(args.device, dtype=torch.float)
-            subF = subF.to(args.device, dtype=torch.float)
-            mask_val = mask_val.to(args.device, dtype=torch.float)
-            maxval = maxval.to(args.device, dtype=torch.float)
-            mean = mean.to(args.device, dtype=torch.float)
-            std = std.to(args.device, dtype=torch.float)
+            input = batch['zf'].to(args.device, dtype=torch.float)
+            target = batch['gt'].to(args.device, dtype=torch.float)
+            subF = batch['subF'].to(args.device, dtype=torch.float)
+            mask_val = batch['mask'].to(args.device, dtype=torch.float)
+            maxval = batch['maxval'].to(args.device, dtype=torch.float)
+            mean = batch['mean'].to(args.device, dtype=torch.float)
+            std = batch['std'].to(args.device, dtype=torch.float)
+            fname = batch['fname']
+            slice = batch['slice_id']
+
+            if args.use_sens_map:
+                sens_map = batch['sens_map'].to(args.device, dtype=torch.float)            
+            else:
+                sens_map = None
 
             if args.dev != 1:
-                output = model(input, subF, mask_val)
+                output = model(input, subF, mask_val, sens_map)
             else:
                 output = input
 
@@ -139,7 +146,6 @@ def test_save_result_per_volume(model, data_loader, args):
                     input = dataFormat(input) * maxval.view(-1,1,1)
                     output = dataFormat(output) * maxval.view(-1,1,1) 
                     target = target * maxval.view(-1,1,1)
-
 
             else:
                 raise NotImplementedError('Please provide correct dataset name: fastmri or cc359')

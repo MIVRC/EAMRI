@@ -56,29 +56,53 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
         # target : (B, H, W)
         # subF: (B, H, W, 2)
         # mask_var: (B, 1, H, W, 1)
-        input, target, subF, mask_var, _, _, _, _, _ = data
         
-        # debug
+       
+        zf = data['zf']
+        gt = data['gt']
+        subF = data['subF']
+        mask_var = data['mask']
+
         assert subF.shape[-1] == 2, "last dimension of input kspace should be 2"
 
-        
-        input = input.to(args.device, dtype=torch.float)
-        target = target.to(args.device, dtype=torch.float)
+        zf = zf.to(args.device, dtype=torch.float)
+        gt = gt.to(args.device, dtype=torch.float)
         subF = subF.to(args.device, dtype=torch.float)
         mask_var = mask_var.to(args.device,dtype=torch.float)
 
+        #=================
         # predict
-        output = model(input, subF, mask_var)
-
-    
+        #=================
+        if 'edge' in args.dataMode: # complex_edge, train with edge model
+            assert 'gt_edge' in data.keys,"Training dataloader do not have gt_edge"
+            gt_edge = data['gt_edge'].to(args.device, dtype=torch.float)
+        
+        if args.use_sens_map:
+            sens_map = data['sens_map'].to(args.device, dtype=torch.float)            
+        else:
+            sens_map = None
+        
+        output = model(zf, subF, mask_var, sens_map)
+   
+        #=================
+        # loss
+        #=================
         if not isinstance(output, list): 
             output = dataFormat(output)
-            loss = F.l1_loss(output, target)
-        else:
+            loss = F.l1_loss(output, gt)
+        else: # list of outputs
             loss = 0.
-            for _, subModel in enumerate(output):
+            for ii, subModel in enumerate(output):
                 subModel = dataFormat(subModel)
-                loss += F.l1_loss(subModel, target)
+                # edge model
+                if 'edge' in args.dataMode:
+                    if ii < len(output)-1:
+                        loss += F.l1_loss(subModel, gt_edge)
+                    else:
+                        loss += F.l1_loss(subModel, gt)
+                # not edge model
+                else:
+                    loss += F.l1_loss(subModel, gt)
 
         loss.backward()
         optimizer.step()
@@ -470,7 +494,7 @@ def main(args):
     # =======================================
     # load dataloader 
     # =======================================
-    train_loader, dev_loader = getDataloader(args.dataName, args.dataMode, args.batchSize, [args.center_fractions], [args.accer], args.resolution, args.train_root, args.valid_root, args.sample_rate, args.challenge)
+    train_loader, dev_loader = getDataloader(args.dataName, args.dataMode, args.batchSize, [args.center_fractions], [args.accer], args.resolution, args.train_root, args.valid_root, args.sample_rate, args.challenge, args.use_sens_map)
 
 
     # =======================================
@@ -501,16 +525,17 @@ def main(args):
     else:
         logger.debug("Start evaluating (without training)")
 
-        if 'edge' not in args.dataMode:
-            dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
-            logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
-            visualize(args , model, dev_loader)
-
-        else:
+        if 'edge' in args.dataMode:
             dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume_edge(model, dev_loader, args)
             logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
             visualize_edge(args , model, dev_loader)
  
+        else:
+            dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
+            logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
+            #visualize(args , model, dev_loader)
+
+
 
 
 def create_arg_parser_fastmri():
@@ -544,8 +569,9 @@ def create_arg_parser_fastmri():
                         help='If set, use multiple GPUs using data parallelism')
     parser.add_argument('--device', type=str, default='cuda',
                         help='Which device to train on. Set to "cuda" to use the GPU')
-
+    
     parser.add_argument('--server', type=str, default='cluster', help='Which device to train on.')
+    parser.add_argument('--use_sens_map', type=bool, default=False, help='Whether to calculate sensitivity map.')
 
     return parser.parse_args()
 

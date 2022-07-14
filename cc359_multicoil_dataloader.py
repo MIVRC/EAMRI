@@ -3,7 +3,9 @@ import h5py
 import glob
 import numpy as np
 from torch.utils.data import Dataset
+from util import Get_sobel 
 from fastmri.data import transforms_simple as T
+from fastmri.data.transforms_simple import EstimateSensitivityMap 
 from typing import List, Tuple
 import pdb
 
@@ -62,6 +64,7 @@ class SliceData_cc359_multicoil(Dataset):
         shuffle: bool,
         is_train:bool,
         dataMode:str, 
+        use_sens_map:bool=False,
     ):
         """Constructor for DataGenerator.
         :param root: root to store the data
@@ -94,6 +97,8 @@ class SliceData_cc359_multicoil(Dataset):
         self.dataMode = dataMode
         self.n_channels = 24
         self.nslices = 256
+        self.dataMode = dataMode
+        self.use_sens_map = use_sens_map #estimate sensitivity map or not
         self.is_train = is_train
         self.shuffle = shuffle
         self.nsamples = len(self.list_IDs) * (self.nslices - self.crop[0] - self.crop[1])
@@ -123,12 +128,10 @@ class SliceData_cc359_multicoil(Dataset):
         else:
             mask =  self.mask_func((218,170,1), 'test') # use fix seed for testing 
         
-        if 'edge' in self.dataMode:
-            assert True, "not implemented"
-        else:
-            zim, target, masked_kspace, mask, mean, std, norm, fname, file_slice = self.__data_generation_new(fname, file_slice, batch_indexes, mask)
+        data = self.__data_generation(fname, file_slice, batch_indexes, mask) #data: dict {'zf', 'gt', 'subF', 'mask', 'sens', 'mean', 'std'}
 
-        return zim, target, masked_kspace, mask, mean, std, norm, fname, file_slice 
+        #return zim, target, masked_kspace, mask, mean, std, norm, fname, file_slice 
+        return data
 
 
     def on_epoch_end(self):
@@ -137,62 +140,11 @@ class SliceData_cc359_multicoil(Dataset):
         if self.shuffle is True:
             np.random.shuffle(self.indexes)
 
-    
     def __data_generation(self, fname, file_slice, batch_indexes, mask):
         """Generates data containing batch_size samples
         :param batch_indexes: Ndarray containing indices to generate in this batch.
         :type batch_indexes: np.ndarray
-        :return: X,y tuple containing zero-filled under-sampled and fully-sampled data, respectively.
-            Shape X and y is [batch_size, dim[0], dim[1], n_channels]
-        :rtype: Tuple[np.ndarray]
-        """
-        # Initialization
-        zim = np.zeros((self.n_channels, self.dim[0], self.dim[1])) #(24, H, W) 
-        masked_kspace = np.zeros((2, self.dim[0], self.dim[1], self.n_channels//2)) #(2, H, W, 12)
-        
-        # load_data
-        with h5py.File(fname, "r") as f:
-            data = f["kspace"]
-            if data.shape[2] == self.dim[1]:
-                kspace = data[file_slice]
-            else: #exceeds 170
-                idx = int((data.shape[2] - self.dim[1]) / 2)
-                kspace = data[file_slice, :, idx:-idx, :]
-     
-        # kspace: (H,W,24)
-
-        aux = np.fft.ifft2(kspace[:, :, ::2] + 1j * kspace[:, :, 1::2], axes=(0, 1))
-        target = torch.from_numpy(np.abs(aux)+0.) #(H, W, C)
-        target = ((target**2).sum(axis=-1) + 0.0).sqrt() #(H, W)
-
-        # mask kspace 
-        temp = kspace * mask #(H, W, 24) mask:(H,W,1)
-        masked_kspace[0,:,:,:] = temp[:,:,::2]
-        masked_kspace[1,:,:,:] = temp[:,:,1::2]
-        
-        # zero-filled
-        aux2 = np.fft.ifft2(temp[:,:,::2] + 1j * temp[:,:,1::2], axes=(0, 1)) #(218, 170, 12) np.complex
-        zim[::2, :, :] = np.transpose(aux2.real, (2,0,1))
-        zim[1::2, :, :] = np.transpose(aux2.imag, (2,0,1))
-
-        # normalize
-        norm = np.abs(aux2).max() * np.ones((1,1,1)) #(1,1,1)
-        zim = torch.from_numpy(zim/norm)
-        target = target / norm[:,:,0]
-        masked_kspace = torch.from_numpy(masked_kspace / norm)
-        mask = torch.unsqueeze(torch.from_numpy(mask),0) #(1, H, W, 1)
-        fname = fname.split('/')[-1]
-        
-        return zim, target, masked_kspace.permute(3,1,2,0), mask, 0, 1, norm, fname, file_slice
-
-
-    def __data_generation_new(self, fname, file_slice, batch_indexes, mask):
-        """Generates data containing batch_size samples
-        :param batch_indexes: Ndarray containing indices to generate in this batch.
-        :type batch_indexes: np.ndarray
-        :return: X,y tuple containing zero-filled under-sampled and fully-sampled data, respectively.
-            Shape X and y is [batch_size, dim[0], dim[1], n_channels]
-        :rtype: Tuple[np.ndarray]
+        :return: dict
         """
         # Initialization
         masked_kspace = np.zeros((2, self.dim[0], self.dim[1], self.n_channels//2)) #(2, H, W, 12)
@@ -211,19 +163,34 @@ class SliceData_cc359_multicoil(Dataset):
         full_kspace[0,:,:,:] = kspace[:,:,::2]
         full_kspace[1,:,:,:] = kspace[:,:,1::2]
         full_kspace = torch.from_numpy(full_kspace).permute(3,1,2,0).contiguous() #(12, H, W, 2)
+        
         target = T.ifft2(full_kspace, shift=False) #(12, H, W, 2)
         target = (target**2).sum(dim=-1).sum(dim=0).sqrt() + 0. #(H, W)
+
+        # edge
+        if 'edge' in self.dataMode:
+            gt_edge = torch.from_numpy(Get_sobel(target.numpy())) # (H, W)
+            gt_edge = gt_edge / gt_edge.max() # normalize
+        else:
+            gt_edge = -1
 
         # mask kspace 
         temp = kspace * mask #(H, W, 24) mask:(H,W,1)
         masked_kspace[0,:,:,:] = temp[:,:,::2]
         masked_kspace[1,:,:,:] = temp[:,:,1::2]
         masked_kspace = torch.from_numpy(masked_kspace).permute(3,1,2,0).contiguous() #(12, H, W, 2)
-        
+
+        # sens map
+        if self.use_sens_map:
+            esmap = EstimateSensitivityMap(gaussian_sigma=0.3)
+            sens_map = esmap(masked_kspace) #(coil, [slice], h, w, 2)
+        else:
+            sens_map = -1
+
+
         # zero-filled
         zim = T.ifft2(masked_kspace, shift=False) #(12, H, W, 2)
         norm = (zim**2).sum(dim=-1).sqrt().max().item()
-
         
         # normalize
         zim = zim/norm
@@ -233,54 +200,22 @@ class SliceData_cc359_multicoil(Dataset):
         mask = torch.unsqueeze(torch.from_numpy(mask),0) #(1, H, W, 1)
         fname = fname.split('/')[-1]
         
-        return zim, target, masked_kspace, mask, 0, 1, norm, fname, file_slice
+        # assign
+        output = {
+                'zf':zim, 
+                'gt':target, 
+                'subF':masked_kspace, 
+                'mask':mask, 
+                'mean': 0, 
+                'std': 1, 
+                'fname':fname, 
+                'slice_id': file_slice, 
+                'maxval': norm, 
+                'gt_edge':gt_edge,
+                'sens_map': sens_map 
+                }
+
+        return output
 
 
 
-
-    def __data_generation_edge(self, batch_indexes, mask):
-        """Generates data containing batch_size samples
-        :param batch_indexes: Ndarray containing indices to generate in this batch.
-        :type batch_indexes: np.ndarray
-        :return: X,y tuple containing zero-filled under-sampled and fully-sampled data, respectively.
-            Shape X and y is [batch_size, dim[0], dim[1], n_channels]
-        :rtype: Tuple[np.ndarray]
-        """
-        # Initialization
-        kspace = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels)) #kspace data
-        target = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels)) #gt image
-        zim = np.zeros((self.batch_size, self.dim[0], self.dim[1], self.n_channels)) #gt image
-        #mask = np.zeros((self.batch_size, self.dim[0], self.dim[1]))
-
-        # Generate data
-        for ii in range(batch_indexes.shape[0]):
-            # Store sample
-            file_id = batch_indexes[ii] // (self.nslices - self.crop[0] - self.crop[1])
-            file_slice = batch_indexes[ii] % (self.nslices - self.crop[0] - self.crop[1])
-            # Load data
-            with h5py.File(self.list_IDs[file_id], "r") as f:
-                data = f["kspace"]
-                if data.shape[2] == self.dim[1]:
-                    kspace[ii, :, :, :] = data[self.crop[0] + file_slice]
-                else: #exceeds 170
-                    idx = int((data.shape[2] - self.dim[1]) / 2)
-                    kspace[ii, :, :, :] = data[self.crop[0] + file_slice, :, idx:-idx, :]
-        
-        aux = np.fft.ifft2(kspace[:, :, :, ::2] + 1j * kspace[:, :, :, 1::2], axes=(1, 2))
-        target[:, :, :, ::2] = aux.real
-        target[:, :, :, 1::2] = aux.imag
-      
-        # masking
-        masked_kspace = kspace * mask
-        
-        aux2 = np.fft.ifft2(masked_kspace[:, :, :, ::2] + 1j * masked_kspace[:, :, :, 1::2], axes=(1, 2))
-        zim[:, :, :, ::2] = aux2.real
-        zim[:, :, :, 1::2] = aux2.imag
-        norm = np.abs(aux2).max(axis=(1, 2, 3), keepdims=True)  
-
-        # normalize
-        target = target / norm  
-        masked_kspace = masked_kspace / norm  
-        
-
-        return zim, target, masked_kspace, norm 

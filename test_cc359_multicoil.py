@@ -5,7 +5,9 @@ import pdb
 import glob
 import matplotlib.pyplot as plt
 from fastmri.data import transforms_simple as T
+from fastmri.data.transforms_simple import EstimateSensitivityMap 
 import warnings;warnings.filterwarnings("ignore")
+
 
 DATA_PATH = "/home/ET/hanhui/opendata/CC-359_multi_coil/Train/*.h5"
 center = [0.08]
@@ -63,7 +65,23 @@ full_kspace = np.zeros((2, 218, 170, 12)) #(2, H, W, 12)
 full_kspace[0,:,:,:] = kspace[:,:,::2]
 full_kspace[1,:,:,:] = kspace[:,:,1::2]
 full_kspace = torch.from_numpy(full_kspace).permute(3,1,2,0).contiguous() #(12, H, W, 2)
+
+# sens map
+esmap = EstimateSensitivityMap(gaussian_sigma=0.3)
+sens_map = esmap(full_kspace) #(coil, [slice], h, w, 2)
+sens_map = (sens_map**2).sum(dim=-1) #(coil, [slice], h, w)
+
+for i in range(len(sens_map)):
+    plt.imsave('sens_map_{}.png'.format(i), sens_map[i].numpy(), cmap='gray' )
+
+
 target0 = T.ifft2(full_kspace, shift=False) #(12, H, W, 2)
+target_abs = (target0**2).sum(dim=-1).sqrt() #(12,H,W)
+
+for i in range(len(target_abs)):
+    plt.imsave('coil_{}.png'.format(i), target_abs[i].numpy(), cmap='gray' )
+
+
 target0 = (target0**2).sum(dim=-1).sum(dim=0).sqrt() + 0. #(H, W)
 
 aux = np.fft.ifft2(kspace[:, :, ::2] + 1j * kspace[:, :, 1::2], axes=(0, 1))

@@ -293,10 +293,10 @@ def center_crop(data: torch.Tensor, shape: Tuple[int, int]) -> torch.Tensor:
     return data[..., w_from:w_to, h_from:h_to]
 
 
-def center_crop_kspace(kspace, shape, size = [320,320]):
+def center_crop_kspace(kspace, shape, size = [320,320], shift=True):
     
     assert kspace.shape[-1] == 2, 'invalid input shape for kspace'
-    img = ifft2(kspace)
+    img = ifft2(kspace, shift=shift)
     w_from = (shape[0] - size[0]) // 2
     h_from = (shape[1] - size[1]) // 2
     w_to = w_from + size[0]
@@ -420,196 +420,250 @@ def root_sum_of_squares(data, dim=0):
     return torch.sqrt((data ** 2).sum(dim))
 
 
+#========================================================
 
-'''
-class UnetDataTransform:
+def safe_divide(input_tensor, other_tensor): 
+    """Divide input_tensor and other_tensor safely, set the output to zero where the divisor b is zero.
+    Parameters
+    ----------
+    input_tensor: torch.Tensor, numerator
+    other_tensor: torch.Tensor, dinominator
+    Returns
+    -------
+    torch.Tensor: the division.
     """
-    Data Transformer for training U-Net models.
+    
+    data = torch.where(
+        other_tensor == 0,
+        torch.tensor([0.0], dtype=input_tensor.dtype),
+        input_tensor / other_tensor,
+    )
+    return data
+
+
+
+
+
+def circular_centered_mask(shape, radius):
+    center = np.asarray(shape) // 2
+    Y, X = np.ogrid[: shape[0], : shape[1]]
+    dist_from_center = np.sqrt((X - center[1]) ** 2 + (Y - center[0]) ** 2)
+    mask = ((dist_from_center <= radius) * np.ones(shape)).astype(bool)
+    return mask[np.newaxis, ..., np.newaxis]
+
+
+
+def cal_acs_mask(shape, radius=18):
+    """
+    calculate autocalibration mask
+    shape: [height, width, 1]
+    """
+    assert len(shape) == 2, "dev: invalid input shape for cal_acs_mask"
+
+    return torch.from_numpy(circular_centered_mask(shape,radius))
+
+
+class EstimateSensitivityMap():
+    """Data Transformer for training MRI reconstruction models.
+    Estimates sensitivity maps given kspace data.
+    modified from Direct
     """
 
     def __init__(
         self,
-        which_challenge: str,
-        mask_func: Optional[MaskFunc] = None,
-        use_seed: bool = True,
+        type_of_map="rss_estimate",
+        gaussian_sigma= None,
+        shift= False,
+        ): 
+        """Inits :class:`EstimateSensitivityMap`.
+        Parameters
+        ----------
+            K-space key. Default `kspace`.
+            The backward operator, e.g. some form of inverse FFT (centered or uncentered).
+        type_of_map: str, optional
+            Type of map to estimate. Can be "unit" or "rss_estimate". Default: "unit".
+        gaussian_sigma: float, optional
+            If non-zero, acs_image well be calculated
+        """
+        super().__init__()
+        if type_of_map not in ["unit", "rss_estimate"]:
+            raise ValueError(f"Expected type of map to be either `unit` or `rss_estimate`. Got {type_of_map}.")
+        self.type_of_map = type_of_map
+        self.gaussian_sigma = gaussian_sigma
+        self.shift = shift 
+
+    def estimate_acs_image(self, kspace_data, width_dim=-2):
+        """Estimates the autocalibration (ACS) image by sampling the k-space using the ACS mask.
+        Parameters
+        ----------
+        kspace_data: (coil, [slice], height, width, complex=2)
+
+        width_dim: int
+            Dimension corresponding to width. Default: -2.
+        Returns
+        -------
+        acs_image: torch.Tensor
+            Estimate of the ACS image.
+        """
+        assert kspace_data.shape[-1] == 2, "estimate sensitivity map, the last dimension of input kspace should be 2"
+
+        kspace_shape = kspace_data.shape[1:-1] #([slices], h, w, 2)
+        acs_mask = cal_acs_mask(kspace_shape)
+
+        if self.gaussian_sigma == 0 or not self.gaussian_sigma:
+            kspace_acs = kspace_data * acs_mask + 0.0  # + 0.0 removes the sign of zeros.
+        else:
+            gaussian_mask = torch.linspace(-1, 1, kspace_data.size(width_dim), dtype=kspace_data.dtype)
+            gaussian_mask = torch.exp(-((gaussian_mask / self.gaussian_sigma) ** 2))
+            gaussian_mask_shape = torch.ones(len(kspace_data.shape)).int()
+            gaussian_mask_shape[width_dim] = kspace_data.size(width_dim)
+            gaussian_mask = gaussian_mask.reshape(tuple(gaussian_mask_shape))
+            kspace_acs = kspace_data * acs_mask * gaussian_mask + 0.0
+
+        # Get complex-valued data solution
+        acs_image = ifft2(kspace_acs, shift=self.shift) # Shape (coil, [slice], height, width, complex=2)
+
+        return acs_image
+
+    def __call__(self, kspace, coil_dim= 0): 
+        """Calculates sensitivity maps for the input sample.
+        Parameters
+        ----------
+        sample: Dict[str, Any]
+            Must contain key matching kspace_key with value a (complex) torch.Tensor
+            of shape (coil, height, width, complex=2).
+        coil_dim: int
+            Coil dimension. Default: 0.
+        Returns
+        -------
+        sample: Dict[str, Any]
+            Sample with key "sensitivity_map" with value the estimated sensitivity map.
+        """
+        if self.type_of_map == "unit":
+            
+            sensitivity_map = torch.zeros(kspace.shape).float()
+
+            # Assumes complex channel is last
+            sensitivity_map[..., 0] = 1.0  # Shape (coil, [slice], height, width, complex=2)
+
+
+        elif self.type_of_map == "rss_estimate":
+            acs_image = self.estimate_acs_image(kspace) # Shape (coil, [slice], height, width, complex=2)
+            acs_image_abs = root_sum_of_squares(acs_image, dim=3) #(coil, [slice], height, width)
+            acs_image_rss = root_sum_of_squares(acs_image_abs, dim=coil_dim) # Shape ([slice], height, width)
+            acs_image_rss = acs_image_rss.unsqueeze(0).unsqueeze(-1) # Shape (1, [slice], height, width, 1)
+            sensitivity_map = safe_divide(acs_image, acs_image_rss) # Shape (coil, [slice], height, width, complex=2)
+
+        return sensitivity_map
+
+
+
+def conjugate(data): 
+    """Compute the complex conjugate of a torch tensor where the last axis denotes the real and complex part (last axis has dimension 2).
+    Parameters
+    ----------
+    data: torch.Tensor
+    Returns
+    -------
+    conjugate_tensor: torch.Tensor
+    """
+    assert data.shape[-1] == 2, 'input data should have last dimension 2'
+    data = data.clone()  # Clone is required as the data in the next line is changed in-place.
+    data[..., 1] = data[..., 1] * -1.0
+
+    return data
+
+
+
+def complex_multiplication(input_tensor, other_tensor):
+    """Multiplies two complex-valued tensors. Assumes input tensors are complex (last axis has dimension 2).
+    Parameters
+    ----------
+    input_tensor: torch.Tensor
+        Input data
+    other_tensor: torch.Tensor
+        Input data
+    Returns
+    -------
+    torch.Tensor
+    """
+    #assert_complex(input_tensor, complex_last=True)
+    #assert_complex(other_tensor, complex_last=True)
+
+    assert input_tensor.shape[-1] == 2, "complex_multiplication, input tensor should have last dimension 2"
+
+    complex_index = -1
+
+    real_part = input_tensor[..., 0] * other_tensor[..., 0] - input_tensor[..., 1] * other_tensor[..., 1]
+    imaginary_part = input_tensor[..., 0] * other_tensor[..., 1] + input_tensor[..., 1] * other_tensor[..., 0]
+
+    multiplication = torch.cat(
+        [
+            real_part.unsqueeze(dim=complex_index),
+            imaginary_part.unsqueeze(dim=complex_index),
+        ],
+        dim=complex_index,
+    )
+
+    return multiplication
+
+
+def reduce_operator(
+    coil_data,
+    sensitivity_map,
+    dim= 0,
     ):
-        """
-        Args:
-            which_challenge: Challenge from ("singlecoil", "multicoil").
-            mask_func: Optional; A function that can create a mask of
-                appropriate shape.
-            use_seed: If true, this class computes a pseudo random number
-                generator seed from the filename. This ensures that the same
-                mask is used for all the slices of a given volume every time.
-        """
-        if which_challenge not in ("singlecoil", "multicoil"):
-            raise ValueError("Challenge should either be 'singlecoil' or 'multicoil'")
-
-        self.mask_func = mask_func
-        self.which_challenge = which_challenge
-        self.use_seed = use_seed
-
-    def __call__(
-        self,
-        kspace: np.ndarray,
-        mask: np.ndarray,
-        target: np.ndarray,
-        attrs: Dict,
-        fname: str,
-        slice_num: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, torch.Tensor, str, int, float]:
-        """
-        Args:
-            kspace: Input k-space of shape (num_coils, rows, cols) for
-                multi-coil data or (rows, cols) for single coil data.
-            mask: Mask from the test dataset.
-            target: Target image.
-            attrs: Acquisition related information stored in the HDF5 object.
-            fname: File name.
-            slice_num: Serial number of the slice.
-
-        Returns:
-            tuple containing:
-                image: Zero-filled input image.
-                target: Target image converted to a torch.Tensor.
-                mean: Mean value used for normalization.
-                std: Standard deviation value used for normalization.
-                fname: File name.
-                slice_num: Serial number of the slice.
-        """
-        kspace = to_tensor(kspace)
-
-        # check for max value
-        max_value = attrs["max"] if "max" in attrs.keys() else 0.0
-
-        # apply mask
-        if self.mask_func:
-            seed = None if not self.use_seed else tuple(map(ord, fname))
-            masked_kspace, mask = apply_mask(kspace, self.mask_func, seed)
-        else:
-            masked_kspace = kspace
-
-        # inverse Fourier transform to get zero filled solution
-        image = fastmri.ifft2c(masked_kspace)
-
-        # crop input to correct size
-        if target is not None:
-            crop_size = (target.shape[-2], target.shape[-1])
-        else:
-            crop_size = (attrs["recon_size"][0], attrs["recon_size"][1])
-
-        # check for FLAIR 203
-        if image.shape[-2] < crop_size[1]:
-            crop_size = (image.shape[-2], image.shape[-2])
-
-        image = complex_center_crop(image, crop_size)
-
-        # absolute value
-        image = fastmri.complex_abs(image)
-
-        # apply Root-Sum-of-Squares if multicoil data
-        if self.which_challenge == "multicoil":
-            image = fastmri.rss(image)
-
-        # normalize input
-        image, mean, std = normalize_instance(image, eps=1e-11)
-        image = image.clamp(-6, 6)
-
-        # normalize target
-        if target is not None:
-            target = to_tensor(target)
-            target = center_crop(target, crop_size)
-            target = normalize(target, mean, std, eps=1e-11)
-            target = target.clamp(-6, 6)
-        else:
-            target = torch.Tensor([0])
-
-        return image, target, mean, std, fname, slice_num, max_value
-
-
-class VarNetDataTransform:
-    """
-    Data Transformer for training VarNet models.
+    r"""
+    Given zero-filled reconstructions from multiple coils :math:`\{x_i\}_{i=1}^{N_c}` and
+    coil sensitivity maps :math:`\{S_i\}_{i=1}^{N_c}` it returns:
+        .. math::
+            R(x_{1}, .., x_{N_c}, S_1, .., S_{N_c}) = \sum_{i=1}^{N_c} {S_i}^{*} \times x_i.
+    Adapted from [1]_.
+    Parameters
+    ----------
+    coil_data: torch.Tensor
+        Zero-filled reconstructions from coils. Should be a complex tensor (with complex dim of size 2).
+    sensitivity_map: torch.Tensor
+        Coil sensitivity maps. Should be complex tensor (with complex dim of size 2).
+    dim: int
+        Coil dimension. Default: 0.
+    Returns
+    -------
+    torch.Tensor:
+        Combined individual coil images.
+    References
+    ----------
+    .. [1] Sriram, Anuroop, et al. “End-to-End Variational Networks for Accelerated MRI Reconstruction.” ArXiv:2004.06688 [Cs, Eess], Apr. 2020. arXiv.org, http://arxiv.org/abs/2004.06688.
     """
 
-    def __init__(self, mask_func: Optional[MaskFunc] = None, use_seed: bool = True):
-        """
-        Args:
-            mask_func: Optional; A function that can create a mask of
-                appropriate shape. Defaults to None.
-            use_seed: If True, this class computes a pseudo random number
-                generator seed from the filename. This ensures that the same
-                mask is used for all the slices of a given volume every time.
-        """
-        self.mask_func = mask_func
-        self.use_seed = use_seed
+    return complex_multiplication(conjugate(sensitivity_map), coil_data).sum(dim)
 
-    def __call__(
-        self,
-        kspace: np.ndarray,
-        mask: np.ndarray,
-        target: np.ndarray,
-        attrs: Dict,
-        fname: str,
-        slice_num: int,
-    ) -> Tuple[torch.Tensor, torch.Tensor, torch.Tensor, str, int, float, torch.Tensor]:
-        """
-        Args:
-            kspace: Input k-space of shape (num_coils, rows, cols) for
-                multi-coil data.
-            mask: Mask from the test dataset.
-            target: Target image.
-            attrs: Acquisition related information stored in the HDF5 object.
-            fname: File name.
-            slice_num: Serial number of the slice.
 
-        Returns:
-            tuple containing:
-                masked_kspace: k-space after applying sampling mask.
-                mask: The applied sampling mask
-                target: The target image (if applicable).
-                fname: File name.
-                slice_num: The slice index.
-                max_value: Maximum image value.
-                crop_size: The size to crop the final image.
-        """
-        if target is not None:
-            target = to_tensor(target)
-            max_value = attrs["max"]
-        else:
-            target = torch.tensor(0)
-            max_value = 0.0
+def expand_operator(
+    data,
+    sensitivity_map,
+    dim = 0,
+):
+    r"""
+    Given a reconstructed image :math:`x` and coil sensitivity maps :math:`\{S_i\}_{i=1}^{N_c}`, it returns
+        .. math::
+            E(x) = (S_1 \times x, .., S_{N_c} \times x) = (x_1, .., x_{N_c}).
+    Adapted from [1]_.
+    Parameters
+    ----------
+    data: torch.Tensor
+        Image data. Should be a complex tensor (with complex dim of size 2).
+    sensitivity_map: torch.Tensor
+        Coil sensitivity maps. Should be complex tensor (with complex dim of size 2).
+    dim: int
+        Coil dimension. Default: 0.
+    Returns
+    -------
+    torch.Tensor:
+        Zero-filled reconstructions from each coil.
+    References
+    ----------
+    .. [1] Sriram, Anuroop, et al. “End-to-End Variational Networks for Accelerated MRI Reconstruction.” ArXiv:2004.06688 [Cs, Eess], Apr. 2020. arXiv.org, http://arxiv.org/abs/2004.06688.
+    """
 
-        kspace = to_tensor(kspace)
-        seed = None if not self.use_seed else tuple(map(ord, fname))
-        acq_start = attrs["padding_left"]
-        acq_end = attrs["padding_right"]
-
-        crop_size = torch.tensor([attrs["recon_size"][0], attrs["recon_size"][1]])
-
-        if self.mask_func:
-            masked_kspace, mask = apply_mask(
-                kspace, self.mask_func, seed, (acq_start, acq_end)
-            )
-        else:
-            masked_kspace = kspace
-            shape = np.array(kspace.shape)
-            num_cols = shape[-2]
-            shape[:-3] = 1
-            mask_shape = [1] * len(shape)
-            mask_shape[-2] = num_cols
-            mask = torch.from_numpy(mask.reshape(*mask_shape).astype(np.float32))
-            mask = mask.reshape(*mask_shape)
-            mask[:, :, :acq_start] = 0
-            mask[:, :, acq_end:] = 0
-
-        return (
-            masked_kspace,
-            mask.byte(),
-            target,
-            fname,
-            slice_num,
-            max_value,
-            crop_size,
-        )
-'''
+    return complex_multiplication(sensitivity_map, data.unsqueeze(dim))

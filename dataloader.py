@@ -708,7 +708,8 @@ def create_datasets(
                     accelerations, 
                     resolution, 
                     sample_rate,
-                    challenge='singlecoil'
+                    challenge='singlecoil',
+                    use_sens_map=False
                     ):
 
     """
@@ -806,21 +807,23 @@ def create_datasets(
             elif challenge == 'multicoil':
                 train_data = SliceData_cc359_multicoil(
                     root=train_root,
-                    crop=(30,30), 
+                    crop=(50,50), 
                     center_fractions=center_fractions,
                     accelerations=accelerations,
                     shuffle=True,
                     is_train=True,
                     dataMode=dataMode,
+                    use_sens_map=use_sens_map
                 )
                 dev_data = SliceData_cc359_multicoil(
                     root=valid_root,
-                    crop=(30,30), 
+                    crop=(50,50), 
                     center_fractions=center_fractions,
                     accelerations=accelerations,
                     shuffle=False,
                     is_train=False,
                     dataMode=dataMode,
+                    use_sens_map=use_sens_map
                 )
 
 
@@ -857,11 +860,12 @@ def getDataloader(
                     train_root, 
                     valid_root, 
                     sample_rate=1, 
-                    challenge='singlecoil'
+                    challenge='singlecoil',
+                    use_sens_map=False,
                 ): 
 
     # create slice dataset
-    dev_data, train_data = create_datasets(dataName, dataMode, train_root, valid_root, center_fractions, accelerations, resolution, sample_rate, challenge)
+    dev_data, train_data = create_datasets(dataName, dataMode, train_root, valid_root, center_fractions, accelerations, resolution, sample_rate, challenge, use_sens_map)
 
     # ================================
     # train

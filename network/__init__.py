@@ -36,8 +36,12 @@ from .net_0705_var3 import net_0705_var3
 
 from .net_0707 import net_0707
 from .net_0707_var1 import net_0707_var1
-from .net_0707_var2 import net_0707_var2
+#from .net_0707_var2 import net_0707_var2
 from .net_0707_var3 import net_0707_var3
+from .recurrentvarnet import RecurrentVarNet
+
+
+
 
 def getScheduler(optimizer, config):
 
@@ -244,6 +248,10 @@ def getNet(netType):
         return net_0705_var3(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=16, DAM_denseLayer=3, num_head=4, n_MSRB=1, n_DAM=3, isFastmri=False)
     elif (netType == 'net_0705_var2'):
         return net_0705_var2(img_size=256, indim=2, convDim=16, expand=2, edgeFeat=8, attdim=32, DAM_denseLayer=1, num_head=4, n_MSRB=2, n_DAM=1, isFastmri=False)
+
+    # =========================================================
+    elif (netType == 'recurvarnet'):
+        return RecurrentVarNet()
 
 
     # =========================================================
