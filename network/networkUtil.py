@@ -7,6 +7,7 @@ from torch.autograd import Variable
 from einops import rearrange
 import numbers
 from torch.nn.parameter import Parameter
+from einops import rearrange
 from fastmri.data import transforms_simple as T
 import pdb
 
@@ -72,9 +73,11 @@ def to_3d(x):
 def to_4d(x,h,w):
     return rearrange(x, 'b (h w) c -> b c h w',h=h,w=w)
 
+
 class BiasFree_LayerNorm(nn.Module):
     def __init__(self, normalized_shape):
         super(BiasFree_LayerNorm, self).__init__()
+        #if isinstance(normalized_shape, numbers.Integral):
         normalized_shape = (normalized_shape,)
         normalized_shape = torch.Size(normalized_shape)
 
@@ -105,19 +108,23 @@ class WithBias_LayerNorm(nn.Module):
         return (x - mu) / torch.sqrt(sigma+1e-5) * self.weight + self.bias
 
 
-
 class LayerNorm(nn.Module):
-    def __init__(self, dim, bias=False):
+    def __init__(self, dim, LayerNorm_type):
         super(LayerNorm, self).__init__()
-
-        if bias:
-            self.body = WithBias_LayerNorm(dim)
-        else:
+        if LayerNorm_type =='BiasFree':
             self.body = BiasFree_LayerNorm(dim)
+        else:
+            self.body = WithBias_LayerNorm(dim)
 
     def forward(self, x):
         h, w = x.shape[-2:]
         return to_4d(self.body(to_3d(x).contiguous()), h, w).contiguous()
+
+
+
+
+
+
 
 
 #======================================

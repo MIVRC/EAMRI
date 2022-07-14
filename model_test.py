@@ -122,7 +122,7 @@ def test_save_result_per_volume(model, data_loader, args):
             output = handle_output(output, 'test')
            
             if args.dataName == 'fastmri':
-                if args.dataMode == 'complex':
+                if 'complex' in args.dataMode: 
                     input = dataFormat(input) /1e6
                     output =  dataFormat(output) /1e6
                     target = target /1e6

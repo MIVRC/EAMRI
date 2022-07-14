@@ -19,7 +19,7 @@ from util import paramNumber
 from PIL import Image
 import matplotlib.pyplot as plt
 from dataloader import getDataloader, dataFormat, handle_output 
-from model_test import test_save_result_per_slice, test_save_result_per_volume, test_save_result_per_volume_edge
+from model_test import test_save_result_per_slice, test_save_result_per_volume 
 import warnings
 warnings.filterwarnings("ignore")
 import pdb
@@ -74,7 +74,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
         # predict
         #=================
         if 'edge' in args.dataMode: # complex_edge, train with edge model
-            assert 'gt_edge' in data.keys,"Training dataloader do not have gt_edge"
+            assert 'gt_edge' in data.keys(),"Training dataloader do not have gt_edge"
             gt_edge = data['gt_edge'].to(args.device, dtype=torch.float)
         
         if args.use_sens_map:
@@ -139,7 +139,7 @@ def train_epoch_edge(args, epoch, model, data_loader, optimizer, logger):
         input, zim_edge, gt, gt_edge, subF, mask_var, _, _, _, _, _ = data
 
         #zim_edge = torch.unsqueeze(zim_edge, 1).contiguous() # dev
-
+        
         input = input.to(args.device, dtype=torch.float)
         gt = gt.to(args.device, dtype=torch.float)
         zim_edge = zim_edge.to(args.device, dtype=torch.float)
@@ -504,12 +504,9 @@ def main(args):
         logger.debug("start training")
         for epoch in range(start_epoch, args.num_epochs):
             scheduler.step(epoch)
-            if 'edge' not in args.dataMode:
-                train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, logger)
-                dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
-            else: # train with edge model
-                train_loss, train_time = train_epoch_edge(args, epoch, model, train_loader, optimizer, logger)
-                dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume_edge(model, dev_loader, args)
+
+            train_loss, train_time = train_epoch(args, epoch, model, train_loader, optimizer, logger)
+            dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
 
             is_new_best = dev_loss < best_dev_loss
             best_dev_loss = min(best_dev_loss, dev_loss)
@@ -525,17 +522,14 @@ def main(args):
     else:
         logger.debug("Start evaluating (without training)")
 
+        dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
+        logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
+        '''
         if 'edge' in args.dataMode:
-            dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume_edge(model, dev_loader, args)
-            logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
             visualize_edge(args , model, dev_loader)
- 
         else:
-            dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
-            logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
-            #visualize(args , model, dev_loader)
-
-
+            visualize(args , model, dev_loader)
+        '''
 
 
 def create_arg_parser_fastmri():

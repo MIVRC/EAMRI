@@ -6,7 +6,7 @@ import torch.optim as optim
 from .networkUtil import *
 from .Unet import Unet_dc
 from .unet_fastmri import UnetModel
-from .RDN_complex import RDN_complex
+from .RDN_complex import RDN_complex, RDN_multicoil
 from .DC_CNN import DC_CNN, DC_CNN_multicoil
 from .cascadeNetwork import CN_Dense
 from .SEN_MRI import WAS 
@@ -38,7 +38,9 @@ from .net_0707 import net_0707
 from .net_0707_var1 import net_0707_var1
 #from .net_0707_var2 import net_0707_var2
 from .net_0707_var3 import net_0707_var3
+
 from .recurrentvarnet import RecurrentVarNet
+from .eamri_0714 import eamri_0714
 
 
 
@@ -84,6 +86,9 @@ def getNet(netType):
         return RDN_complex(dcLayer = 'DC', isFastmri=False)
     elif(netType == 'RDN_complex_DC_fastmri'):
         return RDN_complex(dcLayer = 'DC', isFastmri=True)
+
+    elif(netType == 'RDN_cc359_multicoil'):
+        return RDN_multicoil(xin1=24,midChannel=96,isFastmri=False)
 
     #===========cascade===========
     elif(netType == 'cddntdc'): 
@@ -230,14 +235,16 @@ def getNet(netType):
         return net_0707_var1(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=False)
     elif (netType == 'net_0707_var2'):
         return net_0707_var2(img_size=256, indim=2, edgeFeat=12, attdim=16, n_DAMs=[1,5,5,5], num_head=4, fNums=[64,64,64,64], num_iters=[1,1,1,1], isFastmri=False)
+
+    # =========================================================
+    # finalized model
     elif (netType == 'net_0707_var3'):
         return net_0707_var3(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=False)
     elif (netType == 'net_0707_var3_fastmri'):
         return net_0707_var3(img_size=320, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=True)
 
-
-    elif (netType == 'edge'):
-        return Edge_Net(indim=2, hiddim=8, n_MSRB=2)
+    elif (netType == 'eamri_0714_cc359_multicoil'):
+        return eamri_0714(indim=24, edgeFeat=12, attdim=32, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], fNums=[32,64,64,64], isFastmri=False, isMulticoil=True)
 
     # =========================================================
     elif (netType == 'net_0705'):
