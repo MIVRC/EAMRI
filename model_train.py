@@ -597,6 +597,10 @@ if __name__ == '__main__':
             if args.dataName == 'fastmri':
                 args.train_root = '/project/Math/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train/' 
                 args.valid_root = '/project/Math/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val/' 
+            
+            elif args.dataName == 'cc359':
+                args.train_root = '/project/Math/hanhui/opendata/CC-359_multi_coil/Train/' 
+                args.valid_root = '/project/Math/hanhui/opendata/CC-359_multi_coil/Val/' 
 
 
     elif args.server == 'ai':
