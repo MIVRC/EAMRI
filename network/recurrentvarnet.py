@@ -8,6 +8,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from fastmri.data import transforms_simple as T
 from .recurrent import Conv2dGRU, NormConv2dGRU
+from .networkUtil import *
 
 
 class RecurrentInit(nn.Module):
@@ -184,6 +185,7 @@ class RecurrentVarNet(nn.Module):
         self.num_steps = num_steps
         self.no_parameter_sharing = no_parameter_sharing
         self.block_list = nn.ModuleList()
+
         for _ in range(self.num_steps if self.no_parameter_sharing else 1):
             self.block_list.append(
                 RecurrentVarNetBlock(
@@ -194,6 +196,8 @@ class RecurrentVarNet(nn.Module):
                     shift = shift
                 )
             )
+
+        self.sens_net = SensitivityModel(chans = 8, num_pools = 4, shift=shift)
 
         # shape (B, coils, H, W, 2)
         self._coil_dim = 1
@@ -217,7 +221,7 @@ class RecurrentVarNet(nn.Module):
         input_image: torch.Tensor
             Sense initialization :math:`x_{\text{SENSE}}`.
         """
-        input_image = T.complex_multiplication(
+        input_image = T.complex_mul(
             T.conjugate(sensitivity_map),
             T.ifft2(kspace, shift=self.shift),
         )
@@ -230,7 +234,6 @@ class RecurrentVarNet(nn.Module):
         zf: torch.Tensor,
         masked_kspace: torch.Tensor,
         sampling_mask: torch.Tensor,
-        sensitivity_map: torch.Tensor,
         **kwargs,
     ) -> torch.Tensor:
         """Computes forward pass of :class:`RecurrentVarNet`.
@@ -249,6 +252,8 @@ class RecurrentVarNet(nn.Module):
         """
 
         previous_state: Optional[torch.Tensor] = None
+
+        sensitivity_map = self.sens_net(masked_kspace, sampling_mask)
 
         if self.initializer is not None:
             if self.initializer_initialization == "sense":
@@ -286,7 +291,7 @@ class RecurrentVarNet(nn.Module):
             )
 
         output = T.ifft2(kspace_prediction, shift=self.shift) #(B, coils, H, W, 2)
-        output = output.reshape(masked_kspace.shape[0], -1, masked_kspace.shape[2], masked_kspace.shape[3]) #(B, coils*2, H, W)
+        #output = output.reshape(masked_kspace.shape[0], -1, masked_kspace.shape[2], masked_kspace.shape[3]) #(B, coils*2, H, W)
 
         return output
 

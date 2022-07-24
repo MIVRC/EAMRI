@@ -106,8 +106,8 @@ class Edge_Net(nn.Module):
         self.n_MSRB = n_MSRB 
        
         # head
+        self.norm = LayerNorm(indim, 'Bias_Free')
         modules_head = [conv(indim, hiddim, kernel_size)] #3*3 conv
-
         # body
         modules_body = nn.ModuleList()
         for i in range(n_MSRB):
@@ -121,6 +121,16 @@ class Edge_Net(nn.Module):
         self.Edge_Net_tail = nn.Sequential(*modules_tail)
 
     def forward(self, x):
+
+        """
+        x: (B, C, H, W)
+        """
+        # turn into real valued
+        B, C, H, W = x.shape
+        x_abs = x.reshape(B, -1, H, W, 2)
+        x_abs = (x_abs ** 2).sum(dim=-1).sum(dim=1).sqrt() #(B, H, W)
+        x = torch.unsqueeze(x_abs, 1) #(B, 1, H, W)
+
         x = self.Edge_Net_head(x) #(B, hiddim, H, W)
         res = x
 
@@ -131,28 +141,26 @@ class Edge_Net(nn.Module):
         MSRB_out.append(res)
 
         res = torch.cat(MSRB_out,1) #(B, hiddim*(self.n_MSRB+1), H, W)
-
         # decode
         x = self.Edge_Net_tail(res)
 
         return x
 
 
+class Edge_Net_debug(nn.Module):
+    def __init__(self, indim=1, hiddim=16, n_MSRB=3):
 
-
-class edgeBlock(nn.Module):
-    def __init__(self, inFeat=1, outFeat=16, ks=3):
-        super(edgeBlock,self).__init__()
-        
+        super(Edge_Net_debug,self).__init__()
         # encode
-        self.conv1 = nn.Conv2d(inFeat, outFeat, kernel_size=3, padding = 1, stride=1) 
-        self.bn1 = nn.BatchNorm2d(outFeat)
+        self.conv1 = nn.Conv2d(indim, hiddim, kernel_size=3, padding = 1, stride=1) 
+        self.bn1 = nn.BatchNorm2d(hiddim)
         self.act1 = nn.ReLU()
         
         # decode part
-        self.conv2 = nn.Conv2d(outFeat, inFeat, kernel_size=1, stride=1) 
-        self.bn2 = nn.BatchNorm2d(inFeat)
+        self.conv2 = nn.Conv2d(hiddim, 1, kernel_size=3, stride=1) 
+        self.bn2 = nn.BatchNorm2d(1)
         self.act2 = nn.ReLU()
+
 
 
     def forward(self, x):
@@ -167,7 +175,7 @@ class edgeBlock(nn.Module):
         x2 = self.bn2(x2)
         x2 = self.act2(x2)
 
-        return (x1,x2)
+        return x2
 
 #============================== #============================== #============================== #============================== 
 
@@ -335,7 +343,7 @@ class attBlock(nn.Module):
         return x1
 
 
-class eamri_0714(nn.Module):
+class eamri_0714_debug(nn.Module):
     """
     12 DAM + transformer block
     """
@@ -360,7 +368,7 @@ class eamri_0714(nn.Module):
             n_RDB: number of RDBs 
 
         """
-        super(eamri_0714, self).__init__()
+        super(eamri_0714_debug, self).__init__()
         
         # image module
         self.net1 = convBlock(indim=indim, fNum=fNums[0], growthRate=growthRates[0], n_DAM=n_DAMs[0], layer=layers[0], num_iter=num_iters[0], isMulticoil=isMulticoil, isFastmri=isFastmri)
@@ -369,7 +377,7 @@ class eamri_0714(nn.Module):
         self.net4 = convBlock(indim=indim, fNum=fNums[3], growthRate=growthRates[3], n_DAM=n_DAMs[3], layer=layers[3], num_iter=num_iters[3], isMulticoil=isMulticoil, isFastmri=isFastmri)
 
         # edge module
-        self.edgeNet = Edge_Net(indim=indim, hiddim=edgeFeat, n_MSRB=n_MSRB) # simple edge block
+        self.edgeNet = Edge_Net(indim=1, hiddim=edgeFeat, n_MSRB=n_MSRB) # simple edge block
 
         # edgeatt module
         self.fuse = attBlock(indim, 1, attdim, num_head, bias=False, isFastmri=isFastmri, isMulticoil=isMulticoil) 
@@ -391,17 +399,17 @@ class eamri_0714(nn.Module):
         # second stage
         x2 = self.net2(x1, y, m) #(B, 2, H, W)
         e2 = self.edgeNet(x1) 
-        x1 = checkpoint.checkpoint(self.fuse, x2, e2, y, m)
+        x1 = self.fuse(x2, e2, y, m)
 
         # third stage
         x2 = self.net3(x1, y, m) #(B, 2, H, W)
         e3 = self.edgeNet(x1) 
-        x1 = checkpoint.checkpoint(self.fuse, x2, e3, y, m)
+        x1 = self.fuse(x2, e3, y, m)
 
         # fourth stage
         x2 = self.net4(x1, y, m) #(B, 2, H, W)
         e4 = self.edgeNet(x1) 
-        x1 = checkpoint.checkpoint(self.fuse, x2, e4, y, m)
+        x1 = self.fuse(x2, e4, y, m)
 
         return [e2,e3,e4,x1]
 

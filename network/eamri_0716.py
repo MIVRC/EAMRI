@@ -37,17 +37,18 @@ class convBlock(nn.Module):
         layers = []
         self.n_DAM = n_DAM
         self.num_iter = num_iter
+
         for _ in range(n_DAM):
             layers.append(DAM(indim, fNum, growthRate, layer, dilate, activation, useOri, transition, residual))
-        
-        layers.append(dataConsistencyLayer_fastmri_m(isFastmri=isFastmri, isMulticoil=isMulticoil))
+            layers.append(dataConsistencyLayer_fastmri_m(isFastmri=isFastmri, isMulticoil=isMulticoil))
+
         self.layers = nn.ModuleList(layers)
 
-    def forward(self,x1, y, m):
-
+    def forward(self, x1, y, m):
+        
         for _ in range(self.num_iter):
             for i, layer in enumerate(self.layers):
-                if i < self.n_DAM: 
+                if i % 2 == 0: 
                     x1 = layer(x1)
                 else:     
                     x1 = layer(x1, y, m) # dc layer
@@ -106,8 +107,8 @@ class Edge_Net(nn.Module):
         self.n_MSRB = n_MSRB 
        
         # head
-        modules_head = [conv(indim, hiddim, kernel_size)] #3*3 conv
-
+        self.norm = LayerNorm(indim//2, 'Bias_Free')
+        modules_head = [conv(indim//2, hiddim, kernel_size)] #3*3 conv
         # body
         modules_body = nn.ModuleList()
         for i in range(n_MSRB):
@@ -121,6 +122,18 @@ class Edge_Net(nn.Module):
         self.Edge_Net_tail = nn.Sequential(*modules_tail)
 
     def forward(self, x):
+
+        """
+        x: (B, C, H, W)
+        """
+        # turn into real valued
+        B, C, H, W = x.shape
+        x_abs = x.reshape(B, -1, H, W, 2) #(B, C//2, H, W, 2)
+        x_abs = (x_abs ** 2).sum(dim=-1) #(B, C//2, H, W)
+        x = self.norm(x_abs) #(B, C//2, H, W)
+
+        del x_abs
+
         x = self.Edge_Net_head(x) #(B, hiddim, H, W)
         res = x
 
@@ -131,47 +144,15 @@ class Edge_Net(nn.Module):
         MSRB_out.append(res)
 
         res = torch.cat(MSRB_out,1) #(B, hiddim*(self.n_MSRB+1), H, W)
-
         # decode
         x = self.Edge_Net_tail(res)
 
         return x
 
 
-
-
-class edgeBlock(nn.Module):
-    def __init__(self, inFeat=1, outFeat=16, ks=3):
-        super(edgeBlock,self).__init__()
-        
-        # encode
-        self.conv1 = nn.Conv2d(inFeat, outFeat, kernel_size=3, padding = 1, stride=1) 
-        self.bn1 = nn.BatchNorm2d(outFeat)
-        self.act1 = nn.ReLU()
-        
-        # decode part
-        self.conv2 = nn.Conv2d(outFeat, inFeat, kernel_size=1, stride=1) 
-        self.bn2 = nn.BatchNorm2d(inFeat)
-        self.act2 = nn.ReLU()
-
-
-    def forward(self, x):
-
-        # encode
-        x1 = self.conv1(x)
-        x1 = self.bn1(x1)
-        x1 = self.act1(x1)
-
-        # decode
-        x2 = self.conv2(x1)
-        x2 = self.bn2(x2)
-        x2 = self.act2(x2)
-
-        return (x1,x2)
-
 #============================== #============================== #============================== #============================== 
 
-class attHead(nn.Module):
+class attHead_image(nn.Module):
     """
     norm + 1*1 conv + 3*3 dconv
     """
@@ -182,7 +163,7 @@ class attHead(nn.Module):
         C1: output channel after 1*1 conv
 
         """
-        super(attHead,self).__init__()
+        super(attHead_image,self).__init__()
         self.norm = LayerNorm(C, layernorm_type)
         self.conv1 = nn.Conv2d(C, C1, kernel_size=1, bias=bias) 
         self.conv2 = nn.Conv2d(C1, C1, kernel_size=3, stride=1, padding=1, groups=C1, bias=bias)
@@ -197,7 +178,7 @@ class attHead(nn.Module):
         return x1
 
 
-class attHead1(nn.Module):
+class attHead_edge(nn.Module):
     """
     norm + 3*3 dconv
     """
@@ -208,42 +189,18 @@ class attHead1(nn.Module):
         C1: output channel after 1*1 conv
 
         """
-        super(attHead1,self).__init__()
-        self.norm = LayerNorm(C, layernorm_type)
+        super(attHead_edge,self).__init__()
+        #self.norm = LayerNorm(C, layernorm_type)
         self.conv = nn.Conv2d(C, C1, kernel_size=3, stride=1, padding=1, groups=1, bias=bias)
 
     def forward(self, x):
         """
         x: (B, C, H, W)
         """ 
-        x1 = self.norm(x) #(B, H, W, C)
-        x1 = self.conv(x1)  #(B, C1, H, W)
+        x1 = self.conv(x)  #(B, C1, H, W)
 
         return x1
 
-
-class attHead2(nn.Module):
-    """
-    norm + 3*3 dconv
-    """
-    
-    def __init__(self, C, C1, layernorm_type= 'BiasFree', bias=False):
-        """
-        C: input channel 
-        C1: output channel after 1*1 conv
-
-        """
-        super(attHead2,self).__init__()
-        self.norm = LayerNorm(C, layernorm_type)
-
-    def forward(self, x):
-        """
-        x: (B, C, H, W)
-        """ 
-        x1 = self.norm(x) #(B, H, W, C)
-        #x1 = self.conv(x1)  #(B, C1, H, W)
-
-        return x1
 
 
 
@@ -258,24 +215,11 @@ class EEM(nn.Module):
 
         super(EEM, self).__init__()
 
-        self.imhead = attHead(C, 2 * C2)
-        self.ehead = attHead1(C1, C2)
+        self.imhead = attHead_image(C, 2 * C2)
+        self.ehead = attHead_edge(C1, C2)
         self.num_heads = num_heads
          
         self.a1 = nn.Parameter(torch.ones(num_heads, 1, 1))
-        self.a2 = nn.Parameter(torch.ones(num_heads, 1, 1))
-
-        # ==========================
-        # img att
-        self.im_dim = 12
-        #self.imhead1 = attHead2(C,self.im_dim)
-        self.ws = 8 # window size
-        self.im_qkv = nn.Linear(C, self.im_dim*3, bias=bias)
-        self.im_proj = nn.Linear(self.im_dim, self.im_dim)
-
-
-        # ==========================
-        # final
         self.project_out = nn.Conv2d(C2, C, kernel_size=1, bias=bias)
         
 
@@ -314,7 +258,7 @@ class EEM(nn.Module):
 
         out_eg = self.edge_att(x,e)
         out = self.project_out(out_eg) #(B, C, H, W)
-        xout = x + out
+        xout = x + out #(B, C, H, W)
         
         return xout #(B, C, H, W)
 
@@ -335,7 +279,7 @@ class attBlock(nn.Module):
         return x1
 
 
-class eamri_0714(nn.Module):
+class eamri_0716(nn.Module):
     """
     12 DAM + transformer block
     """
@@ -360,7 +304,7 @@ class eamri_0714(nn.Module):
             n_RDB: number of RDBs 
 
         """
-        super(eamri_0714, self).__init__()
+        super(eamri_0716, self).__init__()
         
         # image module
         self.net1 = convBlock(indim=indim, fNum=fNums[0], growthRate=growthRates[0], n_DAM=n_DAMs[0], layer=layers[0], num_iter=num_iters[0], isMulticoil=isMulticoil, isFastmri=isFastmri)
@@ -389,19 +333,19 @@ class eamri_0714(nn.Module):
         x1 = self.net1(x1, y, m) #(B, 2, H, W)
 
         # second stage
-        x2 = self.net2(x1, y, m) #(B, 2, H, W)
+        x2 = checkpoint.checkpoint(self.net2, x1, y, m) #(B, 2, H, W)
         e2 = self.edgeNet(x1) 
-        x1 = checkpoint.checkpoint(self.fuse, x2, e2, y, m)
+        x1 = self.fuse(x2, e2, y, m)
 
         # third stage
-        x2 = self.net3(x1, y, m) #(B, 2, H, W)
+        x2 = checkpoint.checkpoint(self.net3, x1, y, m) #(B, 2, H, W)
         e3 = self.edgeNet(x1) 
-        x1 = checkpoint.checkpoint(self.fuse, x2, e3, y, m)
+        x1 = self.fuse(x2, e3, y, m)
 
         # fourth stage
-        x2 = self.net4(x1, y, m) #(B, 2, H, W)
+        x2 = checkpoint.checkpoint(self.net4, x1, y, m) #(B, 2, H, W)
         e4 = self.edgeNet(x1) 
-        x1 = checkpoint.checkpoint(self.fuse, x2, e4, y, m)
+        x1 = self.fuse(x2, e4, y, m)
 
         return [e2,e3,e4,x1]
 

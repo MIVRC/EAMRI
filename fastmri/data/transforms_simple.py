@@ -575,7 +575,7 @@ def conjugate(data):
 
 
 
-def complex_multiplication(input_tensor, other_tensor):
+def complex_mul(input_tensor, other_tensor):
     """Multiplies two complex-valued tensors. Assumes input tensors are complex (last axis has dimension 2).
     Parameters
     ----------
@@ -590,7 +590,7 @@ def complex_multiplication(input_tensor, other_tensor):
     #assert_complex(input_tensor, complex_last=True)
     #assert_complex(other_tensor, complex_last=True)
 
-    assert input_tensor.shape[-1] == 2, "complex_multiplication, input tensor should have last dimension 2"
+    assert input_tensor.shape[-1] == 2, "complex_mul, input tensor should have last dimension 2"
 
     complex_index = -1
 
@@ -636,7 +636,7 @@ def reduce_operator(
     .. [1] Sriram, Anuroop, et al. “End-to-End Variational Networks for Accelerated MRI Reconstruction.” ArXiv:2004.06688 [Cs, Eess], Apr. 2020. arXiv.org, http://arxiv.org/abs/2004.06688.
     """
 
-    return complex_multiplication(conjugate(sensitivity_map), coil_data).sum(dim)
+    return complex_mul(conjugate(sensitivity_map), coil_data).sum(dim)
 
 
 def expand_operator(
@@ -665,5 +665,4 @@ def expand_operator(
     ----------
     .. [1] Sriram, Anuroop, et al. “End-to-End Variational Networks for Accelerated MRI Reconstruction.” ArXiv:2004.06688 [Cs, Eess], Apr. 2020. arXiv.org, http://arxiv.org/abs/2004.06688.
     """
-
-    return complex_multiplication(sensitivity_map, data.unsqueeze(dim))
+    return complex_mul(sensitivity_map, data.unsqueeze(dim))

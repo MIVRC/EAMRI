@@ -97,25 +97,25 @@ def test_save_result_per_volume(model, data_loader, args):
     test_logs =[]
     start = time.perf_counter()
     with torch.no_grad():
-        for idx, batch in enumerate(tqdm(data_loader)):
+        for idx, data in enumerate(tqdm(data_loader)):
 
-            input = batch['zf'].to(args.device, dtype=torch.float)
-            target = batch['gt'].to(args.device, dtype=torch.float)
-            subF = batch['subF'].to(args.device, dtype=torch.float)
-            mask_val = batch['mask'].to(args.device, dtype=torch.float)
-            maxval = batch['maxval'].to(args.device, dtype=torch.float)
-            mean = batch['mean'].to(args.device, dtype=torch.float)
-            std = batch['std'].to(args.device, dtype=torch.float)
-            fname = batch['fname']
-            slice = batch['slice_id']
+            input = data['zf'].to(args.device, dtype=torch.float)
+            target = data['gt'].to(args.device, dtype=torch.float)
+            subF = data['subF'].to(args.device, dtype=torch.float)
+            mask_val = data['mask'].to(args.device, dtype=torch.uint8)
+            maxval = data['maxval'].to(args.device, dtype=torch.uint8)
+            mean = data['mean'].to(args.device, dtype=torch.float)
+            std = data['std'].to(args.device, dtype=torch.float)
+            fname = data['fname']
+            slice = data['slice_id']
 
             if args.use_sens_map:
-                sens_map = batch['sens_map'].to(args.device, dtype=torch.float)            
+                sens_map = data['sens_map'].to(args.device, dtype=torch.float)            
             else:
                 sens_map = None
 
             if args.dev != 1:
-                output = model(input, subF, mask_val, sens_map)
+                output = model(input, subF, mask_val)
             else:
                 output = input
 
@@ -136,16 +136,9 @@ def test_save_result_per_volume(model, data_loader, args):
 
             elif args.dataName == 'cc359':
                 assert args.dataMode != 'real', "no real mode for cc359!"
-
-                if args.challenge == 'singlecoil':
-                    input = dataFormat(input) * 1e5
-                    output =  dataFormat(output) * 1e5
-                    target = target * 1e5
-                
-                else: #multicoil
-                    input = dataFormat(input) * maxval.view(-1,1,1)
-                    output = dataFormat(output) * maxval.view(-1,1,1) 
-                    target = target * maxval.view(-1,1,1)
+                input = dataFormat(input) * maxval.view(-1,1,1)
+                output = dataFormat(output) * maxval.view(-1,1,1) 
+                target = target * maxval.view(-1,1,1)
 
             else:
                 raise NotImplementedError('Please provide correct dataset name: fastmri or cc359')
@@ -196,100 +189,6 @@ def test_save_result_per_volume(model, data_loader, args):
         torch.cuda.empty_cache()
 
         return metrics['nmse'], metrics['rmse'], metrics['psnr'], metrics['ssim'], time.perf_counter()-start 
-
-
-def test_save_result_per_volume_edge(model, data_loader, args):
-    """
-    calculate metrics per volume for edge model
-    """ 
-    model.eval()
-    test_logs =[]
-    start = time.perf_counter()
-    with torch.no_grad():
-        for idx, batch in enumerate(tqdm(data_loader)):
-            
-            input, zim_edge, target, _, subF, mask_val, mean, std, maxval, fname, slice = batch
-
-            #zim_edge = torch.unsqueeze(zim_edge, 1).contiguous() # dev
-
-            input = input.to(args.device, dtype=torch.float)
-            zim_edge = zim_edge.to(args.device, dtype=torch.float)
-            target = target.to(args.device, dtype=torch.float)
-            subF = subF.to(args.device, dtype=torch.float)
-            mask_val = mask_val.to(args.device, dtype=torch.float)
-
-            output = model(input, zim_edge, subF, mask_val)
-            output = handle_output(output, 'test')
-
-            mean = mean.unsqueeze(1).unsqueeze(2).to(args.device)
-            std = std.unsqueeze(1).unsqueeze(2).to(args.device)
-            
-            if args.dataName == 'fastmri':
-                if args.dataMode == 'complex' or args.dataMode == 'complex_edge':
-                    input = dataFormat(input) /1e6
-                    output =  dataFormat(output) /1e6
-                    target = target /1e6
-                elif args.dataMode == 'real':
-                    input = input * std + mean
-                    output =  dataFormat(output) * std + mean
-                    target = target * std + mean
-
-            elif args.dataName == 'cc359':
-                if args.dataMode == 'complex' or args.dataMode == 'complex_edge':
-                    input = dataFormat(input) * 1e5
-                    if args.dev == 1:
-                        output = input 
-                    else:
-                        output =  dataFormat(output) * 1e5
-                    target = target * 1e5
-                else:
-                    raise NotImplementedError("Do not have real dataMode for cc359 dataset!")
-
-            test_loss = F.l1_loss(output, target)
-            test_logs.append({
-                'fname': fname,
-                'slice': slice,
-                'maxval': maxval,
-                'output': output.cpu().detach().numpy(),
-                'target': target.cpu().detach().numpy(),
-                'input': input.cpu().detach().numpy(),
-                'loss': test_loss.cpu().detach().numpy(),
-            })
-
-
-        losses = []
-        outputs = defaultdict(list)
-        targets = defaultdict(list)
-        inputs = defaultdict(list)
-        maxvals = defaultdict(list) # store max val of volume
-
-        for log in test_logs:
-            losses.append(log['loss'])
-            for i, (fname, slice) in enumerate(zip(log['fname'], log['slice'])):
-                outputs[fname].append((slice, log['output'][i]))
-                targets[fname].append((slice, log['target'][i]))
-                inputs[fname].append((slice, log['input'][i]))
-                maxvals[fname].append((slice, log['maxval'][i]))
-                
-
-        metrics = dict(val_loss=losses, nmse=[], ssim=[], psnr=[])
-
-        for fname in outputs:
-            output = np.stack([out for _, out in sorted(outputs[fname])])
-            target = np.stack([tgt for _, tgt in sorted(targets[fname])])
-            maxval_volume = np.stack([temp for _, temp in sorted(maxvals[fname])])[0]
-
-            if args.dataName == 'cc359':
-                maxval_volume = None
-            
-            metrics['nmse'].append(evaluate.nmse(target, output))
-            metrics['ssim'].append(evaluate.ssim(target, output, maxval_volume))
-            metrics['psnr'].append(evaluate.psnr(target, output, maxval_volume))
-
-        metrics = {metric: np.mean(values) for metric, values in metrics.items()}
-        torch.cuda.empty_cache()
-        return metrics['nmse'], 0, metrics['psnr'], metrics['ssim'], time.perf_counter()-start 
-
 
 
 def save_reconstructions(reconstructions, out_dir):

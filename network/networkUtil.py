@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.autograd import Variable
 from einops import rearrange
+from typing import List, Optional, Tuple
 import numbers
 from torch.nn.parameter import Parameter
 from einops import rearrange
@@ -77,7 +78,6 @@ def to_4d(x,h,w):
 class BiasFree_LayerNorm(nn.Module):
     def __init__(self, normalized_shape):
         super(BiasFree_LayerNorm, self).__init__()
-        #if isinstance(normalized_shape, numbers.Integral):
         normalized_shape = (normalized_shape,)
         normalized_shape = torch.Size(normalized_shape)
 
@@ -194,87 +194,6 @@ class RDG(nn.Module):
         buffer_cat = torch.cat(temp, dim=1)
         out = self.conv(buffer_cat)
         return out 
-
-
-
-class RDG1(nn.Module):
-    def __init__(self, C, G0, G1, G, n_RDB):
-        """
-        input:
-            C: number of conv in RDB
-            G0: input_channel 
-            G1: output_channel 
-            G: adding channel
-            n_RDB: number of RDBs 
-        """
-        super(RDG1, self).__init__()
-        self.n_RDB = n_RDB
-        RDBs = []
-        self.head = nn.Conv2d(G0, G1, kernel_size=3, padding=1, bias=True) 
-        for i in range(n_RDB):
-            RDBs.append(RDB(C, G1, G))
-        self.RDB = nn.Sequential(*RDBs)
-        self.conv = nn.Conv2d(G1*n_RDB, G1, kernel_size=3, stride=1, padding=1, bias=True)
-
-
-    def forward(self, x):
-        """
-        input: 
-            x (B, G0, H, W)
-        output:
-            out (B, G1, H, W)
-        """
-        buffer = self.head(x)
-        temp = []
-        for i in range(self.n_RDB):
-            buffer = self.RDB[i](buffer)
-            temp.append(buffer)
-        buffer_cat = torch.cat(temp, dim=1)
-        out = self.conv(buffer_cat) #(B, G1, H, W)
-
-        return out
-
-
-
-class RDG2(nn.Module):
-    def __init__(self, C, G0, G1, G, n_RDB):
-        """
-        input:
-            C: number of conv in RDB
-            G0: input_channel 
-            G1: output channel 
-            G: adding channel
-            n_RDB: number of RDBs 
-        """
-        super(RDG2, self).__init__()
-        self.n_RDB = n_RDB
-        RDBs = []
-        self.head = nn.Conv2d(G0, G1, kernel_size=3, padding=1, bias=True) 
-        for i in range(n_RDB):
-            RDBs.append(RDB(C, G1, G))
-        self.RDB = nn.Sequential(*RDBs)
-        self.conv = nn.Conv2d(G1*n_RDB, G1, kernel_size=3, stride=1, padding=1, bias=True)
-        self.conv2 = nn.Conv2d(G1, 1, kernel_size=3, stride=1, padding=1, bias=True)
-
-    def forward(self, x):
-        """
-        input: 
-            x (B, G0, H, W)
-        output:
-            out1 (B, G1, H, W)
-            out2 (B, 1, H, W)
-        """
-        buffer = self.head(x) #(B, G1, H, W)
-        temp = []
-        for i in range(self.n_RDB):
-            buffer = self.RDB[i](buffer)
-            temp.append(buffer)
-        buffer_cat = torch.cat(temp, dim=1)
-        out1 = self.conv(buffer_cat) #(B, G2, H, W)
-        out2 = self.conv2(out1) #(B, 1, H, W)
-
-        return out1, out2
-
 
 
 
@@ -792,143 +711,6 @@ class DAM(nn.Module):
 
 
 
-#===========================================================================================
-
-class new_denseBlockLayer(nn.Module):
-    """
-    bn + relu + conv + bn + relu + conv
-    """
-    def __init__(self, 
-                indim=64, 
-                middim= 64, 
-                outdim=64, 
-                bias=True):
-
-        super(new_denseBlockLayer, self).__init__()
-        
-        # first stage
-        self.norm1 = LayerNorm(indim)
-        self.conv1 = nn.Conv2d(indim, middim,1, bias=bias)  # 1*1 conv
-        self.conv2 = nn.Conv2d(middim, middim, 3, padding=1, stride=1, groups=middim, bias=bias)  # 3*3 conv
-        self.conv3 = nn.Conv2d(middim, indim, 1, padding=0, stride=1, groups=1, bias=bias) # 1*1 conv
-        self.relu1 = nn.GELU()
-        
-        self.norm2 = LayerNorm(indim)
-        self.conv4 = nn.Conv2d(indim, middim, 1, bias=bias)  # 1*1 conv
-        self.conv5 = nn.Conv2d(middim, middim, 3, padding=1, stride=1, groups=middim, bias=bias)  # 3*3 conv
-        self.conv6 = nn.Conv2d(middim, outdim, 1, padding=0, stride=1, groups=1, bias=bias) 
-        self.relu2 = nn.GELU()
- 
-            
-    def forward(self,x):
-        
-        x1 = self.norm1(x)
-        x1 = self.conv1(x1)
-        x1 = self.conv2(x1)
-        x1 = self.relu1(x1)
-        x1 = self.conv3(x1)
-        y = x + x1
-        
-        y1 = self.norm2(y)
-        y1 = self.conv4(y1)
-        y1 = self.conv5(y1)
-        y1 = self.relu2(y1)
-        y1 = self.conv6(y1)
-        
-        return y + y1
-
-
-
-class new_denseConv(nn.Module):
-    """
-    multiple new_denseBlockLayer
-    """
-
-    def __init__(self, 
-            inChannel=16, 
-            expand=2, 
-            layer=4):
-
-        super(new_denseConv, self).__init__()
-       
-        self.denselayer = layer
-        templayerList = []
-        for i in range(0, layer):
-            tempLayer = new_denseBlockLayer(indim=inChannel, 
-                                            middim=inChannel*expand,  
-                                            outdim=inChannel)
-                                            
-            templayerList.append(tempLayer)
-
-        self.layerList = nn.ModuleList(templayerList)
-            
-    def forward(self,x):
-        x1 = x
-        for i in range(0, self.denselayer):
-            x1 = self.layerList[i](x1)
-        
-        return x + x1
-
-
-
-class new_transitionLayer(nn.Module):
-    def __init__(self, indim=64, outdim=2, expand=2, bias=True): 
-        super(new_transitionLayer, self).__init__()
-
-        middim = int(indim * expand)
-        self.norm = LayerNorm(indim)
-        self.conv1 = nn.Conv2d(indim, middim, 1, bias=bias)
-        self.conv2 = nn.Conv2d(middim, middim, 3, padding=1, stride=1, groups=middim, bias=bias)  # 3*3 conv
-        self.conv3 = nn.Conv2d(middim, outdim, 1, padding=0, stride=1, groups=1, bias=bias) 
-        self.relu = nn.GELU()
-        
-        
-    def forward(self,x):
-        
-        x1 = self.norm(x)
-        x1 = self.conv1(x1)
-        x1 = self.conv2(x1)
-        x1 = self.relu(x1)
-        x1 = self.conv3(x1)
-
-        return x1
-
-
-
-class new_DAM(nn.Module):
-    '''
-    new DAM module 
-    '''
-    def __init__(self, 
-                indim= 2, 
-                fNum = 16, 
-                expand = 2, 
-                layer = 3):
-
-        super(new_DAM, self).__init__()
-        self.indim = indim 
-        self.outChannel = indim 
-
-        self.intro = nn.Conv2d(indim, fNum, kernel_size=3, padding = 1, groups=1, bias=True) 
-
-        self.denseConv = new_denseConv(inChannel=fNum, \
-                                    expand=expand, \
-                                    layer = layer)
-      
-        self.outConv = new_transitionLayer(indim=fNum, outdim=indim)
-
-
-    def forward(self, x):
-
-        x2 = self.intro(x) #[B,16,H,W]
-        x2 = self.denseConv(x2) #(8,64,256,256)
-        x2 = self.outConv(x2) #(8,2,256,256)
-        x2 = x2+x[:,:self.outChannel]
-
-        return x2
-
-
-
 
 # Dense Block in DAM
 class denseBlockLayer(nn.Module):
@@ -1229,19 +1011,19 @@ class dataConsistencyLayer_fastmri_m(nn.Module):
         if(len(xin.shape)==4): #(B,C,H,W)
             if(xin.shape[1]==1):
                 emptyImag = torch.zeros_like(xin)
-                xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,1)
+                xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,1).contiguous()
             else:
                 if not self.isMulticoil:
-                    xin = xin.permute(0,2,3,1) #(bs,h,w,2)
+                    xin = xin.permute(0,2,3,1).contiguous() #(bs,h,w,2)
         
         # dynamic MRI
         elif(len(xin.shape)==5): 
             assert True, "DC layer: not implement dynamic mri"
             if(xin.shape[1]==1):
                 emptyImag = torch.zeros_like(xin)
-                xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,4,1)
+                xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,4,1).contiguous()
             else:
-                xin_c = xin.permute(0,2,3,4,1)
+                xin_c = xin.permute(0,2,3,4,1).contiguous()
 
             mask = mask.reshape(mask.shape[0],mask.shape[1],mask.shape[2],mask.shape[3],1)
         else:
@@ -1255,13 +1037,13 @@ class dataConsistencyLayer_fastmri_m(nn.Module):
                 xin_f = T.fft2(xin,normalized=self.normalized, shift=True)
                 xGT_f = y
                 xout_f = xin_f + (- xin_f + xGT_f) * iScale * mask
-                xout = T.ifft2(xout_f) 
+                xout = T.ifft2(xout_f, shift=True) 
 
             else: # for cc359 or cardiac
-                xin_f = T.fft2(xin,normalized=self.normalized, shift=False)
+                xin_f = T.fft(xin, 2, normalized=self.normalized)
                 xGT_f = y
                 xout_f = xin_f + (- xin_f + xGT_f) * iScale * mask
-                xout = T.ifft(xout_f,normalized=self.normalized, shift=False)
+                xout = T.ifft(xout_f,2, normalized=self.normalized)
 
             if(len(xin.shape)==4):
                 xout = xout.permute(0,3,1,2) #(B, 2, H, W)
@@ -1291,7 +1073,38 @@ class dataConsistencyLayer_fastmri_m(nn.Module):
 
             xout = xout.reshape(N,-1,H,W)
 
-        return xout
+        return xout.contiguous()
+
+
+
+class DC_multicoil(nn.Module):
+    """
+    data consistency layer for multicoil
+    """
+    def __init__(self, initLamda = 1, isStatic = True, shift=False):
+        super(DC_multicoil, self).__init__()
+        self.normalized = True #norm == 'ortho'
+        self.lamda = Parameter(torch.Tensor(1))
+        self.lamda.data.uniform_(0, 1)
+        self.isStatic = isStatic
+        self.shift = shift 
+    
+    def forward(self, xin, y, mask, sens_map):
+        """
+        xin: (B, 2, H, W)
+        """
+        assert xin.shape[1] == 2, "dc layer the last dimension of input x should be greater than 2"
+        iScale = 1
+        
+        xin = T.expand_operator(xin.permute(0,2,3,1), sens_map, dim=1) #(B, coils, H, W, 2)
+        xin_f = T.fft2(xin,normalized=self.normalized, shift=self.shift)
+        xGT_f = y
+        xout_f = xin_f + (- xin_f + xGT_f) * iScale * mask
+        xout = T.ifft2(xout_f, normalized=self.normalized, shift=self.shift) 
+        xout = T.reduce_operator(xout, sens_map, dim=1) #(B, H, W, 2)
+        
+        return xout.permute(0,3,1,2).contiguous()
+
 
 
 
@@ -1393,95 +1206,173 @@ class dataConsistencyLayer_static(nn.Module):
         return xt
         
 
-class dataConsistencyLayer_iden(nn.Module):
+#===================================================
+class dilatedConvBlock(nn.Module):
+    def __init__(self, iConvNum = 3, inChannel=32):
+        super(dilatedConvBlock, self).__init__()
+        self.LRelu = nn.LeakyReLU()
+        convList = []
+        for i in range(1, iConvNum+1):
+            tmpConv = nn.Conv2d(inChannel,inChannel,3,padding = i, dilation = i)
+            convList.append(tmpConv)
+        self.layerList = nn.ModuleList(convList)
+    
+    def forward(self, x1):
+        x2 = x1
+        for conv in self.layerList:
+            x2 = conv(x2)
+            x2 = self.LRelu(x2)
+        
+        return x2
+ 
+
+class sensNet(nn.Module):
+    def __init__(self, convNum = 3, recursiveTime = 3, inChannel = 24, midChannel=32):
+        super(sensNet, self).__init__()
+        self.rTime = recursiveTime
+        self.LRelu = nn.LeakyReLU()
+        self.conv1 = nn.Conv2d(inChannel,midChannel,3,padding = 1)
+        self.dilateBlock = dilatedConvBlock(convNum, midChannel)
+        self.conv2 = nn.Conv2d(midChannel,inChannel,3,padding = 1)
+
+
+    def complex_to_chan_dim(self, x):
+        b, c, h, w, two = x.shape
+        assert two == 2
+        return x.permute(0, 4, 1, 2, 3).reshape(b, 2 * c, h, w)
+
+    def chan_complex_to_last_dim(self, x):
+        b, c2, h, w = x.shape
+        assert c2 % 2 == 0
+        c = c2 // 2
+        return x.view(b, 2, c, h, w).permute(0, 2, 3, 4, 1).contiguous()
+
+
+    def forward(self, x1):
+
+        x1 = self.complex_to_chan_dim(x1) 
+
+        x2 = self.conv1(x1)
+        x2 = self.LRelu(x2)
+        xt = x2
+        for i in range(self.rTime):
+            x3 = self.dilateBlock(xt)
+            xt = x3+x2
+        x4 = self.conv2(xt)
+        x4 = self.LRelu(x4)
+        x5 = x4+x1
+        
+        x5 = self.chan_complex_to_last_dim(x5)
+        return x5
+
+
+
+class SensitivityModel(nn.Module):
     """
-    original one step data consistency layer 
+    Model for learning sensitivity estimation from k-space data.
+    This model applies an IFFT to multichannel k-space data and then a U-Net
+    to the coil images to estimate coil sensitivities. It can be used with the
+    end-to-end variational network.
     """
-    def __init__(self, initLamda = 1, isStatic = False):
-        super(dataConsistencyLayer_iden, self).__init__()
-        self.normalized = True #norm == 'ortho'
-        self.lamda = Parameter(torch.Tensor(1))
-        self.lamda.data.uniform_(0, 1)
-        self.isStatic = isStatic
-    
-    def forward(self, xin, y, mask):
-        return xin
+
+    def __init__(
+        self,
+        chans: int,
+        num_pools: int,
+        in_chans: int = 2,
+        out_chans: int = 2,
+        drop_prob: float = 0.0,
+        mask_center: bool = True,
+        shift:bool = False,
+    ):
+        """
+        Args:
+            chans: Number of output channels of the first convolution layer.
+            num_pools: Number of down-sampling and up-sampling layers.
+            in_chans: Number of channels in the input to the U-Net model.
+            out_chans: Number of channels in the output to the U-Net model.
+            drop_prob: Dropout probability.
+            mask_center: Whether to mask center of k-space for sensitivity map
+                calculation.
+        """
+        super(SensitivityModel, self).__init__()
+        self.mask_center = mask_center
+        self.shift = shift
+        
+        self.norm_unet = sensNet(convNum=3, recursiveTime=1, inChannel=2, midChannel=8) 
+
+    def chans_to_batch_dim(self, x: torch.Tensor) -> Tuple[torch.Tensor, int]:
+        b, c, h, w, comp = x.shape 
+
+        return x.view(b * c, 1, h, w, comp), b
+
+    def batch_chans_to_chan_dim(self, x: torch.Tensor, batch_size: int) -> torch.Tensor:
+        bc, _, h, w, comp = x.shape
+        c = bc // batch_size
+
+        return x.view(batch_size, c, h, w, comp)
+
+    def divide_root_sum_of_squares(self, x: torch.Tensor) -> torch.Tensor:
+        # x: (B, coils, H, W, 2)
+        assert x.shape[-1] == 2, "the last dimension of input should be 2"
+        tmp = T.root_sum_of_squares(T.root_sum_of_squares(x, dim=4), dim=1).unsqueeze(-1).unsqueeze(1)
+        
+        return x/tmp
+        #return T.safe_divide(x, tmp).cuda()
 
 
-
-
-def abs4complex(x):
-    y = torch.zeros_like(x)
-    y[:,0:1] = torch.sqrt(x[:,0:1]*x[:,0:1]+x[:,1:2]*x[:,1:2])
-    y[:,1:2] = 0
-
-    return y
-
-def kspaceFilter(xin, mask):
-    if(len(xin.shape)==4):
-        if(xin.shape[1]==1):
-            emptyImag = torch.zeros_like(xin)
-            xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,1)
+    def get_pad_and_num_low_freqs(
+        self, mask: torch.Tensor, num_low_frequencies: Optional[int] = None
+    ) -> Tuple[torch.Tensor, torch.Tensor]:
+        
+        if num_low_frequencies is None or num_low_frequencies == 0:
+            # get low frequency line locations and mask them out
+            # mask: [B, 1, H, W, 1]
+            squeezed_mask = mask[:, 0, 0, :, 0].to(torch.int8)
+            cent = squeezed_mask.shape[1] // 2
+            # running argmin returns the first non-zero
+            left = torch.argmin(squeezed_mask[:, :cent].flip(1), dim=1)
+            right = torch.argmin(squeezed_mask[:, cent:], dim=1)
+            num_low_frequencies_tensor = torch.max(
+                2 * torch.min(left, right), torch.ones_like(left)
+            )  # force a symmetric center unless 1
         else:
-            xin_c = xin.permute(0,2,3,1)
-        mask = mask.reshape(mask.shape[0],mask.shape[1],mask.shape[2],1)
-    elif(len(xin.shape)==5):
-        if(xin.shape[1]==1):
-            emptyImag = torch.zeros_like(xin)
-            xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,4,1)
-        else:
-            xin_c = xin.permute(0,2,3,4,1)
-        assert False,"3d not support"
-    else:
-        assert False, "xin shape length has to be 4(2d) or 5(3d)"
-    
-    xin_f = torch.fft(xin_c,2, normalized=True)
-    
-    xout_f = xin_f*mask
+            num_low_frequencies_tensor = num_low_frequencies * torch.ones(
+                mask.shape[0], dtype=mask.dtype, device=mask.device
+            )
 
-    xout = torch.ifft(xout_f,2, normalized=True)
-    if(len(xin.shape)==4):
-        xout = xout.permute(0,3,1,2)
-    else:
-        xout = xout.permute(0,4,1,2,3)
-    if(xin.shape[1]==1):
-        xout = torch.sqrt(xout[:,0:1]*xout[:,0:1]+xout[:,1:2]*xout[:,1:2])
-    
-    return xout
+        pad = (mask.shape[-2] - num_low_frequencies_tensor + 1) // 2
 
-def kspaceFuse(x1,x2):
-    lout = []
-    for xin in [x1,x2]:
-        if(len(xin.shape)==4):
-            if(xin.shape[1]==1):
-                emptyImag = torch.zeros_like(xin)
-                xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,1)
-            else:
-                xin_c = xin.permute(0,2,3,1)
-        elif(len(xin.shape)==5):
-            if(xin.shape[1]==1):
-                emptyImag = torch.zeros_like(xin)
-                xin_c = torch.cat([xin,emptyImag],1).permute(0,2,3,4,1)
-            else:
-                xin_c = xin.permute(0,2,3,4,1)
-        else:
-            assert False, "xin shape length has to be 4(2d) or 5(3d)"
-        lout.append(xin_c)
-    x1c,x2c = lout
-    
-    x1f = torch.fft(x1c,2, normalized=True)
-    x2f = torch.fft(x2c,2, normalized=True)
+        return pad, num_low_frequencies_tensor
 
-    xout_f = x1f+x2f
+    def forward(
+        self,
+        masked_kspace: torch.Tensor,
+        mask: torch.Tensor,
+        num_low_frequencies: Optional[int] = None,
+    ) -> torch.Tensor:
 
-    xout = torch.ifft(xout_f,2, normalized=True)
-    if(len(x1.shape)==4):
-        xout = xout.permute(0,3,1,2)
-    else:
-        xout = xout.permute(0,4,1,2,3)
-    if(xin.shape[1]==1):
-        xout = torch.sqrt(xout[:,0:1]*xout[:,0:1]+xout[:,1:2]*xout[:,1:2])
+        if self.mask_center:
+            pad, num_low_freqs = self.get_pad_and_num_low_freqs(
+                mask, num_low_frequencies
+            )
+            masked_kspace = T.batched_mask_center(
+                masked_kspace, pad, pad + num_low_freqs
+            )
 
-    return xout
+
+        # convert to image space
+        # images: [96, 1, 218, 179, 2]
+        # batches: 8
+        images, batches = self.chans_to_batch_dim(T.ifft2(masked_kspace, shift=self.shift))
+        
+        
+        # estimate sensitivities
+        return self.divide_root_sum_of_squares(self.batch_chans_to_chan_dim(self.norm_unet(images), batches))
+
+
+
+
+
 
 

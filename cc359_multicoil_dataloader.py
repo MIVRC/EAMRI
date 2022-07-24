@@ -130,7 +130,6 @@ class SliceData_cc359_multicoil(Dataset):
         
         data = self.__data_generation(fname, file_slice, batch_indexes, mask) #data: dict {'zf', 'gt', 'subF', 'mask', 'sens', 'mean', 'std'}
 
-        #return zim, target, masked_kspace, mask, mean, std, norm, fname, file_slice 
         return data
 
 
@@ -166,10 +165,11 @@ class SliceData_cc359_multicoil(Dataset):
         
         target = T.ifft2(full_kspace, shift=False) #(12, H, W, 2)
         target = (target**2).sum(dim=-1).sum(dim=0).sqrt() + 0. #(H, W)
-
-        # edge
+        
+        # gt edge
         if 'edge' in self.dataMode:
-            gt_edge = torch.from_numpy(Get_sobel(target.numpy())) # (H, W)
+            target_normal = (255*(target - target.min()))/(target.max().item() - target.min().item())
+            gt_edge = torch.from_numpy(Get_sobel(target_normal.numpy())) # (H, W)
             gt_edge = gt_edge / gt_edge.max() # normalize
         else:
             gt_edge = -1
@@ -187,14 +187,13 @@ class SliceData_cc359_multicoil(Dataset):
         else:
             sens_map = -1
 
-
         # zero-filled
         zim = T.ifft2(masked_kspace, shift=False) #(12, H, W, 2)
         norm = (zim**2).sum(dim=-1).sqrt().max().item()
         
         # normalize
-        zim = zim/norm
-        zim = zim.reshape(-1, self.dim[0], self.dim[1]) # stacking
+        zim = zim/norm #(12, H, W, 2)
+        #zim = zim.reshape(-1, self.dim[0], self.dim[1]) # (24, H, W)
         target = target / norm
         masked_kspace = masked_kspace / norm
         mask = torch.unsqueeze(torch.from_numpy(mask),0) #(1, H, W, 1)

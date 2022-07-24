@@ -1,7 +1,7 @@
 "sample code for fastmri training and evaluating"
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "7"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import sys
 import time
 import cv2
@@ -47,7 +47,6 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
     start_epoch = start_iter = time.perf_counter()
     global_step = epoch * len(data_loader)
 
-   
     for iter, data in enumerate(data_loader):
     
         optimizer.zero_grad()
@@ -57,7 +56,6 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
         # subF: (B, H, W, 2)
         # mask_var: (B, 1, H, W, 1)
         
-       
         zf = data['zf']
         gt = data['gt']
         subF = data['subF']
@@ -68,7 +66,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
         zf = zf.to(args.device, dtype=torch.float)
         gt = gt.to(args.device, dtype=torch.float)
         subF = subF.to(args.device, dtype=torch.float)
-        mask_var = mask_var.to(args.device,dtype=torch.float)
+        mask_var = mask_var.to(args.device,dtype=torch.uint8)
 
         #=================
         # predict
@@ -82,32 +80,35 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
         else:
             sens_map = None
         
-        output = model(zf, subF, mask_var, sens_map)
+        output = model(zf, subF, mask_var)
    
         #=================
         # loss
         #=================
+        nn = 1
         if not isinstance(output, list): 
             output = dataFormat(output)
             loss = F.l1_loss(output, gt)
         else: # list of outputs
+            nn = len(output)
             loss = 0.
-            for ii, subModel in enumerate(output):
-                subModel = dataFormat(subModel)
+            for ii, ele in enumerate(output):
+                ele= dataFormat(ele)
                 # edge model
                 if 'edge' in args.dataMode:
                     if ii < len(output)-1:
-                        loss += F.l1_loss(subModel, gt_edge)
+                        assert len(ele.shape)==3, 'invalid edge output'
+                        loss += F.l1_loss(ele, gt_edge)
                     else:
-                        loss += F.l1_loss(subModel, gt)
+                        loss += F.l1_loss(ele, gt)
                 # not edge model
                 else:
-                    loss += F.l1_loss(subModel, gt)
+                    loss += F.l1_loss(ele, gt)
 
         loss.backward()
         optimizer.step()
-        avg_loss = 0.99 * avg_loss + 0.01 * loss.item() if iter > 0 else loss.item()
-
+        avg_loss = (0.99 * avg_loss + 0.01 * loss.item() if iter > 0 else loss.item())/nn
+        
         if iter % args.report_interval == 0:
             logger.debug(
                 f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
@@ -119,85 +120,6 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
         
     return avg_loss, time.perf_counter() - start_epoch
 
-
-def train_epoch_edge(args, epoch, model, data_loader, optimizer, logger):
-    """
-    train mith multi edge label (deep supervision)
-    """
-    model.train()
-    avg_loss = 0.
-    avg_im_loss = 0.
-    avg_edge_loss = 0.
-    start_epoch = start_iter = time.perf_counter()
-    global_step = epoch * len(data_loader)
-    #edgeExtract = Get_gradient()
-
-    for iter, data in enumerate(data_loader):
-    
-        optimizer.zero_grad()
-
-        input, zim_edge, gt, gt_edge, subF, mask_var, _, _, _, _, _ = data
-
-        #zim_edge = torch.unsqueeze(zim_edge, 1).contiguous() # dev
-        
-        input = input.to(args.device, dtype=torch.float)
-        gt = gt.to(args.device, dtype=torch.float)
-        zim_edge = zim_edge.to(args.device, dtype=torch.float)
-        gt_edge = gt_edge.to(args.device, dtype=torch.float)
-        subF = subF.to(args.device, dtype=torch.float)
-        mask_var = mask_var.to(args.device, dtype=torch.float)
-       
-        outputs = model(input, zim_edge, subF, mask_var)
-        loss = 0.
-        im_loss = 0.
-        edge_loss = 0.
-        
-        for kk, output in enumerate(outputs):
-            output = dataFormat(output)
-            if kk == len(outputs)-1: # image
-                loss += F.l1_loss(output, gt)
-                im_loss += F.l1_loss(output, gt)
-
-            else: # edge 
-                loss +=  F.l1_loss(output, gt_edge) 
-                edge_loss += F.l1_loss(output, gt_edge)
-
-        loss.backward()
-        optimizer.step()
-        
-        avg_loss = 0.99 * avg_loss + 0.01 * loss.item() if iter > 0 else loss.item()
-        avg_im_loss = 0.99 * avg_im_loss + 0.01 * im_loss.item() if iter > 0 else im_loss.item()
-        avg_edge_loss = 0.99 * avg_edge_loss + 0.01 * edge_loss.item() if iter > 0 else edge_loss.item()
-        
-        #avg_im_loss = 0
-        #avg_edge_loss = 0
-
-        '''
-        if iter % args.report_interval == 0:
-            logger.debug(
-                f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
-                f'Iter = [{iter:4d}/{len(data_loader):4d}] '
-                f'Loss = {loss.item():.4g} Avg Loss = {avg_loss:.4g} '
-                f'im_Loss = {im_loss.item():.4g} Avg im Loss = {avg_im_loss:.4g} '
-                f'edge_Loss = {edge_loss.item():.4g} Avg edge Loss = {avg_edge_loss:.4g} '
-                f'Time = {time.perf_counter() - start_iter:.4f}s',
-            )
-        '''
-        if iter % args.report_interval == 0:
-            logger.debug(
-                f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
-                f'Iter = [{iter:4d}/{len(data_loader):4d}] '
-                f'Loss = {loss.item():.4g} Avg Loss = {avg_loss:.4g} '
-                f'Time = {time.perf_counter() - start_iter:.4f}s',
-            )
-
-        start_iter = time.perf_counter()
-        
-        if args.dev == 1:
-            break
-
-
-    return avg_loss, time.perf_counter() - start_epoch
 
 
 
@@ -238,202 +160,149 @@ def build_model(args):
 
 
 def build_optim(args, params):
-    #optimizer = torch.optim.RMSprop(params, args.lr, weight_decay=args.weight_decay)
     optimizer = torch.optim.Adam(params, lr=args.lr, weight_decay = 1e-7) 
     return optimizer
 
 
+
 def visualize(args, model, data_loader):
     """
+    visualize  
     """
     print("visualizing")
-    if model is not None:
-        model.eval()
-    if args.dataName == 'cc359':
-        jump = 1
-    else:
-        jump = 10
+    model.eval()
 
     with torch.no_grad():
         for iter, data in tqdm(enumerate(data_loader)):
-            if iter % jump == 0: # every 10 iter
-                input, target, subF, mask_var, mean, std, maxval, fname, slice = data
+            if iter % args.jump == 0: # every 10 iter
                 
-                input = input.to(args.device, dtype=torch.float)
-                target = target.to(args.device, dtype=torch.float)
-                subF = subF.to(args.device, dtype=torch.float)
-                mask_var = mask_var.to(args.device,dtype=torch.float)
-                maxval = maxval.to(args.device,dtype=torch.float)
-                mean = mean.unsqueeze(1).unsqueeze(2).to(args.device, dtype=torch.float)
-                std = std.unsqueeze(1).unsqueeze(2).to(args.device, dtype=torch.float)
-                
-                if args.dev != 1:
-                    output = model(input, subF, mask_var)
-                else:
-                    output = input
+                #===========================   
+                # prepare data
+                #===========================   
 
-                output = handle_output(output, 'test')
+                fname = data['fname']
+                slice = data['slice_id']
+
+                for idx in range(len(fname)):
+                    select = "{}-{}".format(fname[idx].split('.')[0], slice[idx])
+                    if select not in ["e15197s3_P53760-133", "e15197s3_P53760-127", "e14531s6_P68096-205", "e14531s6_P68096-127", "e16673s13_P31744-205"]:
+                        continue
+
+                input = data['zf'].to(args.device, dtype=torch.float)
+                gt = data['gt'].to(args.device, dtype=torch.float)
+                subF = data['subF'].to(args.device, dtype=torch.float)
+                mask_var = data['mask'].to(args.device, dtype=torch.uint8)
+                maxval = data['maxval'].to(args.device, dtype=torch.float)
+                mean = data['mean'].to(args.device, dtype=torch.float)
+                std = data['std'].to(args.device, dtype=torch.float)
                 
+                if args.use_sens_map:
+                    sens_map = data['sens_map'].to(args.device, dtype=torch.float)            
+                else:
+                    sens_map = None
+ 
+                #===========================   
+                # predict              
+                #===========================   
+                if args.dev == 1:
+                    outputs = input
+                else:
+                    outputs = model(input, subF, mask_var)
+                
+                if type(outputs) == list:
+                    pred = outputs[-1]
+                else:
+                    pred = outputs
+                
+                #===========================   
+                # store edge outputs
+                #===========================   
+
+                edges = [] #(e1, e2, e3, gt_edge)
+                if 'edge' in args.dataMode: # edge model
+                    assert type(outputs) is list, "outputs should at least have 2 elements for edge models"
+                    for ii in range(len(outputs)-1):
+                        tmp = dataFormat(outputs[ii]).detach().cpu().data.numpy()
+                        edges.append(tmp)
+                    edges.append(data['gt_edge'])
+
+                N_edge = len(edges)
+
+                #===========================   
+                # normalize back data
+                #===========================   
+
                 if args.dataName == 'fastmri':
-                    if args.dataMode == 'complex':
+                    if 'complex' in args.dataMode: 
                         input = dataFormat(input) /1e6
-                        output =  dataFormat(output) /1e6
-                        target = target /1e6
+                        pred = dataFormat(pred) / 1e6
+                        gt = gt/1e6
+
                     elif args.dataMode == 'real':
-                        input = input * std + mean
-                        output =  dataFormat(output) * std + mean
-                        target = target * std + mean
+                        std1 = std.view(-1,1,1)
+                        mean1 = mean.view(-1,1,1)
+                        input = dataFormat(input) * std1 + mean1
+                        pred  =  dataFormat(pred) * std1 +mean1
+                        gt = gt* std + mean
 
                 elif args.dataName == 'cc359':
+
                     if args.challenge == 'singlecoil':
                         input = dataFormat(input) * 1e5
-                        output =  dataFormat(output) * 1e5
-                        target = target * 1e5
-                    else:
-                        input = dataFormat(input*maxval.view(-1,1,1,1)) 
-                        output =  dataFormat(output*maxval.view(-1,1,1,1)) 
-                        target = target * maxval.view(-1,1,1)
+                        pred = dataFormat(pred) * 1e5 
+                        gt = gt * 1e5
+
+                    else: #multicoil
+                        input = dataFormat(input) * maxval.view(-1,1,1)
+                        pred = dataFormat(pred) * maxval.view(-1,1,1) 
+                        gt = gt * maxval.view(-1,1,1)
 
                 else:
                     raise NotImplementedError('Please provide correct dataset name: fastmri or cc359')
-
-                target_np = target.detach().cpu().data.numpy()
-                output_np = output.detach().cpu().data.numpy()
+                
+                #===========================   
+                # transform into numpy
+                #===========================   
+                
+                gt_np = gt.detach().cpu().data.numpy()
+                pred_np = pred.detach().cpu().data.numpy()
                 input_np = input.detach().cpu().data.numpy()
-                mask_np = mask_var.detach().cpu().data.numpy()  #(B,H,W,1)
-                
-                #temp_shape = mask_np.shape
-                #temp = np.ones((temp_shape[0], temp_shape[1], temp_shape[2], 1))
-                #temp = temp * mask_np
-                
-                #res_np = 5 * (np.abs(target_np - output_np) / target_np.max())
-                #zim_res_np = 5 * (np.abs(target_np - input_np) / target_np.max())
-            
-                N = len(target_np)
-                for idx in range(N):
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_gt.png'.format(fname[idx].split('.')[0], slice[idx])), target_np[idx], cmap='gray' )
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_pred.png'.format(fname[idx].split('.')[0], slice[idx])), output_np[idx], cmap='gray' )
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_zf.png'.format(fname[idx].split('.')[0], slice[idx])), input_np[idx], cmap='gray' )
-                    #plt.imsave(os.path.join(args.im_root, '{}-{}_res.png'.format(fname[idx].split('.')[0], slice[idx])), res_np[idx], cmap='viridis')
-                    #plt.imsave(os.path.join(args.im_root, '{}-{}_zim_res.png'.format(fname[idx].split('.')[0], slice[idx])), zim_res_np[idx], cmap='viridis')
+                mask_np = mask_var.detach().cpu().data.numpy()  #(B,1,W,1)
+                res_np = 5 * (np.abs(gt_np - pred_np) / gt_np.max())
+                zim_res_np = 5 * (np.abs(gt_np- input_np) / gt_np.max())
 
+                #===========================   
+                # plot
+                #===========================   
+                
+                N = len(gt_np)
+                for idx in range(N):
+                    select = "{}-{}".format(fname[idx].split('.')[0], slice[idx])
+                    if select not in ["e15197s3_P53760-133", "e15197s3_P53760-127", "e14531s6_P68096-205", "e14531s6_P68096-127", "e16673s13_P31744-205"]:
+                        continue
+
+
+                    plt.imsave(os.path.join(args.im_root, '{}-{}_gt.png'.format(fname[idx].split('.')[0], slice[idx])), gt_np[idx], cmap='gray' )
+                    plt.imsave(os.path.join(args.im_root, '{}-{}_pred.png'.format(fname[idx].split('.')[0], slice[idx])), pred_np[idx], cmap='gray' )
+                    plt.imsave(os.path.join(args.im_root, '{}-{}_zf.png'.format(fname[idx].split('.')[0], slice[idx])), input_np[idx], cmap='gray' )
+                    plt.imsave(os.path.join(args.im_root, '{}-{}_res.png'.format(fname[idx].split('.')[0], slice[idx])), res_np[idx], cmap='viridis')
+                    plt.imsave(os.path.join(args.im_root, '{}-{}_zim_res.png'.format(fname[idx].split('.')[0], slice[idx])), zim_res_np[idx], cmap='viridis')
+                    
+                    # plot mask
                     if len(mask_np.shape) == 5:
                         plt.imsave(os.path.join(args.im_root, '{}-{}_mask.png'.format(fname[idx].split('.')[0], slice[idx])), mask_np[idx,0,:,:,0], cmap='gray')
                     else:
                         plt.imsave(os.path.join(args.im_root, '{}-{}_mask.png'.format(fname[idx].split('.')[0], slice[idx])), mask_np[idx,:,:,0], cmap='gray')
+                        
+                    # plot edge
+                    if N_edge > 0:
+                        for kk in range(N_edge):
+                            if kk < N_edge - 1:
+                                plt.imsave(os.path.join(args.im_root, '{}-{}_pred_edge{}.png'.format(fname[idx].split('.')[0], slice[idx], kk)), edges[kk][idx], cmap='gray' )
+                            else:
+                                plt.imsave(os.path.join(args.im_root, '{}-{}_gt_edge.png'.format(fname[idx].split('.')[0], slice[idx])), edges[kk][idx], cmap='gray' )
 
-
-
-
-
-def visualize_edge(args, model, data_loader):
-    """
-    visualize edge
-    """
-    print("visualizing")
-    model.eval()
-    if args.dataName == 'cc359':
-        jump = 1
-    else:
-        jump = 10
-
-    with torch.no_grad():
-        for iter, data in tqdm(enumerate(data_loader)):
-            if iter % jump == 0: # every 10 iter
-
-                input, zim_edge, gt, gt_edge, subF, mask_var, mean, std, maxval, fname, slice = data
-
-                # sent to device
-                input = input.to(args.device, dtype=torch.float)
-                gt = gt.to(args.device, dtype=torch.float)
-                zim_edge = zim_edge.to(args.device, dtype=torch.float)
-                subF = subF.to(args.device, dtype=torch.float)
-                mask_var = mask_var.to(args.device, dtype=torch.float)
-                mean = mean.unsqueeze(1).unsqueeze(2).to(args.device, dtype=torch.float)
-                std = std.unsqueeze(1).unsqueeze(2).to(args.device, dtype=torch.float)
-               
-                outputs = model(input, zim_edge, subF, mask_var)
-                
-                e1 = dataFormat(outputs[0])
-                e2 = dataFormat(outputs[1])
-                e3 = dataFormat(outputs[2])
-                e4 = dataFormat(outputs[3])
-                pred = dataFormat(outputs[-1])
-
-               
-                if args.dataName == 'fastmri':
-                    if 'complex' in args.dataMode: 
-                        input = dataFormat(input) /1e6
-                        if args.dev == 1:
-                            pred = input
-                        else:
-                            pred =  pred /1e6
-                        gt = gt/1e6
-
-                    elif args.dataMode == 'real':
-                        input = input * std + mean
-                        output =  dataFormat(output) * std + mean
-                        gt = gt* std + mean
-
-                elif args.dataName == 'cc359':
-                    if 'complex' in args.dataMode: 
-                        input = dataFormat(input) * 1e5
-                        if args.dev == 1:
-                            pred = input 
-                        else:
-                            pred =  pred * 1e5
-                        gt = gt * 1e5
-
-                else:
-                    raise NotImplementedError('Please provide correct dataset name: fastmri or cc359')
-
-                gt_np = gt.detach().cpu().data.numpy()
-                gt_edge_np = gt_edge.numpy()
-                e0_np = zim_edge.detach().cpu().data.numpy()
-                e1_np = e1.detach().cpu().data.numpy()
-                e2_np = e2.detach().cpu().data.numpy()
-                e3_np = e3.detach().cpu().data.numpy()
-                e4_np = e4.detach().cpu().data.numpy()
-                pred_np = pred.detach().cpu().data.numpy()
-                input_np = input.detach().cpu().data.numpy()
-
-
-                #mask_np = mask_var.detach().cpu().data.numpy()  #(B,1,W,1)
-                #temp_shape = mask_np.shape
-                #temp = np.ones((temp_shape[0], temp_shape[2], temp_shape[2], 1))
-                #temp = temp * mask_np
-                #res_np = 5 * (np.abs(gt_np - pred_np) / gt_np.max())
-                #zim_res_np = 5 * (np.abs(gt_np- input_np) / gt_np.max())
-
-                N = len(gt_np)
-                for idx in range(N):
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_gt.png'.format(fname[idx].split('.')[0], slice[idx])), gt_np[idx], cmap='gray' )
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_gt_edge.png'.format(fname[idx].split('.')[0], slice[idx])), gt_edge_np[idx], cmap='gray' )
-
-                    #=============== 
-                    # plot edge distribution
-                    temp = gt_edge_np[idx]
-                    temp = temp / np.float(temp.max())
-                    mask = temp >= 0.2
-                    ratio = np.float(np.sum(mask))/(mask.shape[0] * mask.shape[1])
-                    temp = temp * mask
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_gt_edge_filter_{}.png'.format(fname[idx].split('.')[0], slice[idx], ratio)), temp, cmap='gray' )
-
-                    #=============== 
-                    
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_e0.png'.format(fname[idx].split('.')[0], slice[idx])), e0_np[idx], cmap='gray' )
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_e1.png'.format(fname[idx].split('.')[0], slice[idx])), e1_np[idx], cmap='gray' )
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_e2.png'.format(fname[idx].split('.')[0], slice[idx])), e2_np[idx], cmap='gray' )
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_e3.png'.format(fname[idx].split('.')[0], slice[idx])), e3_np[idx], cmap='gray' )
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_e4.png'.format(fname[idx].split('.')[0], slice[idx])), e4_np[idx], cmap='gray' )
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_pred.png'.format(fname[idx].split('.')[0], slice[idx])), pred_np[idx], cmap='gray' )
-                    plt.imsave(os.path.join(args.im_root, '{}-{}_zf.png'.format(fname[idx].split('.')[0], slice[idx])), input_np[idx], cmap='gray' )
-                    
-                    #plt.imsave(os.path.join(args.im_root, '{}-{}_res.png'.format(fname[idx].split('.')[0], slice[idx])), res_np[idx], cmap='viridis')
-                    #plt.imsave(os.path.join(args.im_root, '{}-{}_zim_res.png'.format(fname[idx].split('.')[0], slice[idx])), zim_res_np[idx], cmap='viridis')
-                    #plt.imsave(os.path.join(args.im_root, '{}-{}_mask.png'.format(fname[idx].split('.')[0], slice[idx])), temp[idx,:,:,0], cmap='gray')
-
-
+                       
 
 
 
@@ -521,15 +390,12 @@ def main(args):
     # ====================================
     else:
         logger.debug("Start evaluating (without training)")
-
         dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
         logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
-        '''
-        if 'edge' in args.dataMode:
-            visualize_edge(args , model, dev_loader)
-        else:
+        if args.dev != 1:
             visualize(args , model, dev_loader)
-        '''
+        
+
 
 
 def create_arg_parser_fastmri():
@@ -545,10 +411,11 @@ def create_arg_parser_fastmri():
     parser.add_argument('--netType', type=str) 
     parser.add_argument('--exp-dir', type=pathlib.Path, default='./results/', help='Path to store the results')
     parser.add_argument('--num-epochs', type=int, default=80, help='Number of training epochs')
+    parser.add_argument('--jump', type=int, default=10, help='how many jump to plot images')
     parser.add_argument('--sample_rate', type=float, help="Sample rate", default=1.)
     parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate')
     parser.add_argument('--lr-step-size', type=int, default=20, help='Period of learning rate decay')
-    parser.add_argument('--batchSize', type=int, default=4) 
+    parser.add_argument('--batchSize', type=int, default=8) 
     parser.add_argument('--accer', type=int, default=4) 
     parser.add_argument('--center_fractions', type=float, default=0.08) 
     parser.add_argument('--report_interval', type=int, default=100) 
@@ -563,9 +430,8 @@ def create_arg_parser_fastmri():
                         help='If set, use multiple GPUs using data parallelism')
     parser.add_argument('--device', type=str, default='cuda',
                         help='Which device to train on. Set to "cuda" to use the GPU')
-    
     parser.add_argument('--server', type=str, default='cluster', help='Which device to train on.')
-    parser.add_argument('--use_sens_map', type=bool, default=False, help='Whether to calculate sensitivity map.')
+    parser.add_argument('--use_sens_map', type=int, default=0, help='Whether to calculate sensitivity map.')
 
     return parser.parse_args()
 
@@ -621,7 +487,6 @@ if __name__ == '__main__':
         args.center_fractions = 0.08
     elif args.accer == 8:
         args.center_fractions = 0.04
-
 
     main(args)
     

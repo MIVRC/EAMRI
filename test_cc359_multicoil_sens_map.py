@@ -116,11 +116,8 @@ class SensitivityModel(nn.Module):
         images, batches = self.chans_to_batch_dim(T.ifft2(masked_kspace, shift=self.shift))
         
         # estimate sensitivities
-        return self.divide_root_sum_of_squares(self.batch_chans_to_chan_dim(self.norm_unet(images), batches))
-
-
-
-
+        #return masked_kspace, images, self.divide_root_sum_of_squares(self.batch_chans_to_chan_dim(self.norm_unet(images), batches))
+        return masked_kspace, images, self.divide_root_sum_of_squares(self.batch_chans_to_chan_dim(self.norm_unet(images), batches))
 
 
 
@@ -176,16 +173,6 @@ full_kspace[0,:,:,:] = kspace[:,:,::2]
 full_kspace[1,:,:,:] = kspace[:,:,1::2]
 full_kspace = torch.from_numpy(full_kspace).permute(3,1,2,0).contiguous() #(12, H, W, 2)
 
-#===============================================
-# sens map
-#===============================================
-esmap = EstimateSensitivityMap(gaussian_sigma=0.3)
-sens_map = esmap(full_kspace) #(coil, [slice], h, w, 2)
-sens_map_abs = (sens_map**2).sum(dim=-1) #(coil, [slice], h, w)
-
-for i in range(len(sens_map)):
-    plt.imsave('sens_map_{}.png'.format(i), sens_map_abs[i].numpy(), cmap='gray' )
-
 
 #===============================================
 # coil image
@@ -232,6 +219,16 @@ ks_abs = np.log(1 + ks_abs)
 
 for i in range(len(sens_map)):
     plt.imsave('kspace_{}.png'.format(i), ks_abs[i], cmap='gray' )
+
+
+#===============================================
+# sensitivity map
+#===============================================
+sens_net = Sensitivity
+
+
+
+
 
 
 #===============================================

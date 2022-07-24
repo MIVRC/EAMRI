@@ -675,7 +675,6 @@ class DataTransform_complex_cc359_edge:
         
         target = transforms.complex_abs(target)
      
-         
         # true edge
         gt_edge = torch.from_numpy(Get_sobel(target.numpy())) # 1 channel
         gt_edge = gt_edge / gt_edge.max() # normalize
@@ -689,12 +688,23 @@ class DataTransform_complex_cc359_edge:
         zim_abs = transforms.complex_abs(zim)
         _, mean, std = transforms.normalize_instance(zim_abs, eps=1e-11)
 
-        # zim edge
-        zim_edge = torch.from_numpy(Get_sobel(zim_abs.numpy()))
-        
-        zim = zim.permute(2,0,1)
+        zim = zim.permute(2,0,1) #(2, H, W)
 
-        return zim, zim_edge, target, gt_edge, masked_kspace, mask, mean, std, maxval, fname, slice
+        output = {
+                'zf':zim, 
+                'gt':target, 
+                'subF':masked_kspace, 
+                'mask':mask, 
+                'mean': 0, 
+                'std': 1, 
+                'fname':fname, 
+                'slice_id': slice, 
+                'maxval': 1e5, 
+                'gt_edge':gt_edge,
+                }
+
+
+        return output
 
 
 
@@ -835,16 +845,21 @@ def create_datasets(
 def dataFormat(x): 
     if len(x.shape) == 3:
         return x 
-    elif x.shape[1] == 1: #(B,1,H,W)
-        x = x.squeeze(1)
-    elif x.shape[1] == 2: #single coil (B,2,H,W)
-        x = (x**2).sum(dim=1).sqrt()
-    else: #(B,C,H,W)
-        assert len(x.shape) == 4, "dataFormat do not support dynamic MRI"
-        B, C, H, W = x.shape
-        x = x.reshape(B,-1,H,W,2)
+    elif len(x.shape) == 5: #(B, C, H, W, 2)
+        assert x.shape[-1] == 2, "dataFormat last dimension should be 2"
         x = (x**2).sum(dim=-1).sqrt() #(B,-1, H, W)
         x = ((x**2).sum(dim=1)).sqrt() #(B,H,W)
+    elif len(x.shape) == 4:
+        if x.shape[1] == 1: #(B,1,H,W)
+            x = x.squeeze(1)
+        elif x.shape[1] == 2: #single coil (B,2,H,W)
+            x = (x**2).sum(dim=1).sqrt()
+        else: #(B,C,H,W)
+            assert len(x.shape) == 4, "dataFormat do not support dynamic MRI"
+            B, C, H, W = x.shape
+            x = x.reshape(B,-1,H,W,2)
+            x = (x**2).sum(dim=-1).sqrt() #(B,-1, H, W)
+            x = ((x**2).sum(dim=1)).sqrt() #(B,H,W)
 
     return x
 
