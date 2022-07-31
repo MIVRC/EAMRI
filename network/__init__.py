@@ -61,8 +61,10 @@ from .eamri_0721_var2 import eamri_0721_var2
 from .eamri_0722 import eamri_0722
 from .eamri_0722_var1 import eamri_0722_var1
 
-
 from .e2evarnet import VarNet
+from .kikinet import KIKINet 
+from .vsnet import vsnet
+
 
 
 def getScheduler(optimizer, config):
@@ -134,7 +136,7 @@ def getNet(netType):
     elif(netType == 'Unet_dc_fastmri'):
         return Unet_dc(isFastmri=True)
 
-    elif(netType == 'unet_multicoil_cc359'):
+    elif(netType == 'unet'):
         return unet_multicoil_cc359(indim=2, shift=False)
     
     elif(netType == 'unet_24chans'): #dev
@@ -337,7 +339,7 @@ def getNet(netType):
     elif (netType == 'eamri_0722'):
         return eamri_0722(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3)
 
-    elif (netType == 'eamri_0722_var1'):
+    elif (netType == 'eamri_0722_var1'): #ablation model without edge
         return eamri_0722_var1(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3)
 
     # =========================================================
@@ -356,9 +358,16 @@ def getNet(netType):
     # =========================================================
     elif (netType == 'e2evarnet'):
         return VarNet(num_cascades=5, sens_chans=4, sens_pools=4, chans=6, pools=4, mask_center=True, shift=False)
+    elif (netType == 'e2evarnet_var1'):
+        return VarNet(num_cascades=5, sens_chans=4, sens_pools=4, chans=8, pools=4, mask_center=True, shift=False)
+    
+    # =========================================================
+    elif (netType == 'kikinet'):
+        return KIKINet(image_model_architecture= "MWCNN", kspace_model_architecture= "UNET", num_iter=5,image_mwcnn_hidden_channels = 16, image_mwcnn_num_scales = 4, image_mwcnn_bias = True, image_mwcnn_batchnorm = False, image_unet_num_filters = 8, image_unet_num_pool_layers = 4, image_unet_dropout_probability = 0.0, kspace_conv_hidden_channels = 16, kspace_conv_n_convs = 4, kspace_conv_batchnorm = False, kspace_didn_hidden_channels = 64, kspace_didn_num_dubs = 6, kspace_didn_num_convs_recon = 9, kspace_unet_num_filters = 8, kspace_unet_num_pool_layers = 4, kspace_unet_dropout_probability = 0.0, shift = False)
 
-    elif (netType == 'e2evarnet_big'):
-        return VarNet(num_cascades=12, sens_chans=8, sens_pools=4, chans=18, pools=4, mask_center=True, shift=False)
+    # =========================================================
+    elif (netType == 'vsnet'):
+        return vsnet(alfa=0.1, beta=0.1, cascades=5, hiddim=96)
     else:
         assert False,"Wrong net type"
 

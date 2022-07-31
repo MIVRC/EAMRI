@@ -635,7 +635,6 @@ def reduce_operator(
     ----------
     .. [1] Sriram, Anuroop, et al. “End-to-End Variational Networks for Accelerated MRI Reconstruction.” ArXiv:2004.06688 [Cs, Eess], Apr. 2020. arXiv.org, http://arxiv.org/abs/2004.06688.
     """
-
     return complex_mul(conjugate(sensitivity_map), coil_data).sum(dim)
 
 

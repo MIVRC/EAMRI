@@ -4,6 +4,7 @@ import numpy as np
 import pdb
 import glob
 import cv2 as cv
+import torch.nn as nn
 import matplotlib.pyplot as plt
 from fastmri.data import transforms_simple as T
 from fastmri.data.transforms_simple import EstimateSensitivityMap 
@@ -16,7 +17,7 @@ center = [0.08]
 accer = [4]
 resolution = 320
 
-
+'''
 class SensitivityModel(nn.Module):
     """
     Model for learning sensitivity estimation from k-space data.
@@ -119,9 +120,7 @@ class SensitivityModel(nn.Module):
         return self.divide_root_sum_of_squares(self.batch_chans_to_chan_dim(self.norm_unet(images), batches))
 
 
-
-
-
+'''
 
 
 
@@ -176,6 +175,17 @@ full_kspace[0,:,:,:] = kspace[:,:,::2]
 full_kspace[1,:,:,:] = kspace[:,:,1::2]
 full_kspace = torch.from_numpy(full_kspace).permute(3,1,2,0).contiguous() #(12, H, W, 2)
 
+
+ks_abs = (full_kspace ** 2).sum(dim=-1).sqrt()
+ks_abs = np.log(1 + ks_abs)
+for i in range(12):
+    plt.imsave('gt_kspace_{}.png'.format(i), ks_abs[i], cmap='gray' )
+
+
+
+
+
+'''
 #===============================================
 # sens map
 #===============================================
@@ -195,12 +205,16 @@ target_abs = (target0**2).sum(dim=-1).sqrt() #(12,H,W)
 for i in range(len(target_abs)):
     plt.imsave('coil_{}.png'.format(i), target_abs[i].numpy(), cmap='gray' )
 
+'''
 
 #===============================================
 # gt
 #===============================================
-target0 = (target0**2).sum(dim=-1).sum(dim=0).sqrt() + 0. #(H, W)
+#target0 = (target0**2).sum(dim=-1).sum(dim=0).sqrt() + 0. #(H, W)
+#plt.imsave('gt.png', target0.numpy(), cmap='gray' )
 
+
+'''
 #===============================================
 # edge
 #===============================================
@@ -216,6 +230,8 @@ target = torch.from_numpy(np.abs(aux)+0.) #(H, W, C)
 target = ((target**2).sum(axis=-1) + 0.0).sqrt() #(H, W)
 #target = torch.unsqueeze(target, 0) #(1, H, W)
 
+'''
+
 #===============================================
 # mask kspace
 #===============================================
@@ -230,7 +246,7 @@ masked_kspace = torch.from_numpy(masked_kspace).permute(3,1,2,0).contiguous() #(
 ks_abs = (masked_kspace ** 2).sum(dim=-1).sqrt().numpy()
 ks_abs = np.log(1 + ks_abs)
 
-for i in range(len(sens_map)):
+for i in range(12):
     plt.imsave('kspace_{}.png'.format(i), ks_abs[i], cmap='gray' )
 
 
@@ -240,14 +256,22 @@ for i in range(len(sens_map)):
 aux2 = np.fft.ifft2(temp[:,:,::2] + 1j * temp[:,:,1::2], axes=(0, 1)) #(218, 170, 12) np.complex
 zim1 = np.sqrt((np.abs(aux2)**2).sum(axis=-1))
 
+zf_ks = np.fft.fft2(aux2) #(218, 170, 12)
+zfks_abs = np.abs(zf_ks)
+zfks_abs = np.log(1 + zfks_abs)
 
+for i in range(12):
+    plt.imsave('zf_kspace_{}.png'.format(i), zfks_abs[:,:,i], cmap='gray' )
+
+
+
+'''
 #===============================================
 # zero-filled 2
 print(masked_kspace.shape)
 aux22 = T.ifft2(masked_kspace, shift=False) #(12, H, W, 2)
 zim2 = (aux22 ** 2).sum(dim=-1).sum(dim=0).sqrt()
 #===============================================
-
 
 
 #===============================================
@@ -264,7 +288,6 @@ plt.imsave('reduce_output.png', tmp_abs, cmap='gray' )
 #===============================================
 tmp_expand = T.expand_operator(tmp, sens_map)
 
-pdb.set_trace()
 
 
 plt.imsave('cc359_m_gt.png', target.numpy(), cmap='gray' )
@@ -272,3 +295,4 @@ plt.imsave('cc359_m_gt2.png', target0.numpy(), cmap='gray' )
 plt.imsave('cc359_m_zim1.png', zim1, cmap='gray' )
 plt.imsave('cc359_m_zim2.png', zim2, cmap='gray' )
 
+'''

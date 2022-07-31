@@ -87,18 +87,26 @@ class SliceData_cc359_multicoil(Dataset):
         :param shuffle: Whether or not to shuffle data, defaults to True.
         :type shuffle: bool, optional
         """
+
+        #args.train_root = '/home/ET/hanhui/opendata/CC-359_multi_coil/Train/' 
+        
         self.list_IDs = glob.glob((root+"/*.h5").__str__())
         self.dim = (218,170)
         
         self.mask_func = MaskFunc(center_fractions, accelerations)
-
         self.crop = crop  # Remove slices with no or little anatomy
         self.batch_size = 1
         self.dataMode = dataMode
         self.n_channels = 24
         self.nslices = 256
         self.dataMode = dataMode
-        self.use_sens_map = use_sens_map #estimate sensitivity map or not
+        self.use_sens_map = use_sens_map #use true sensitivity map or not
+        if use_sens_map:
+            sens_root= root.rstrip('/') + '_sensitivity/'
+            self.list_IDs_sens = glob.glob((sens_root+"/*.h5").__str__())
+        else:
+            self.list_IDs_sens = None
+
         self.is_train = is_train
         self.shuffle = shuffle
         self.nsamples = len(self.list_IDs) * (self.nslices - self.crop[0] - self.crop[1])
@@ -122,13 +130,18 @@ class SliceData_cc359_multicoil(Dataset):
         file_id = batch_indexes // (self.nslices - self.crop[0] - self.crop[1])
         file_slice = self.crop[0] + batch_indexes % (self.nslices - self.crop[0] - self.crop[1])
         fname = self.list_IDs[file_id]
+        if self.use_sens_map:
+            assert self.list_IDs_sens is not None, "dataloader do not sensitivity map"
+            fname_sens = self.list_IDs_sens[file_id]
+        else:
+            fname_sens = None
         
         if self.is_train:
             mask =  self.mask_func((218,170,1), fname) # use different seed for training
         else:
             mask =  self.mask_func((218,170,1), 'test') # use fix seed for testing 
         
-        data = self.__data_generation(fname, file_slice, batch_indexes, mask) #data: dict {'zf', 'gt', 'subF', 'mask', 'sens', 'mean', 'std'}
+        data = self.__data_generation(fname, fname_sens, file_slice, batch_indexes, mask) #data: dict {'zf', 'gt', 'subF', 'mask', 'sens', 'mean', 'std'}
 
         return data
 
@@ -139,7 +152,7 @@ class SliceData_cc359_multicoil(Dataset):
         if self.shuffle is True:
             np.random.shuffle(self.indexes)
 
-    def __data_generation(self, fname, file_slice, batch_indexes, mask):
+    def __data_generation(self, fname, fname_sens, file_slice, batch_indexes, mask):
         """Generates data containing batch_size samples
         :param batch_indexes: Ndarray containing indices to generate in this batch.
         :type batch_indexes: np.ndarray
@@ -149,7 +162,7 @@ class SliceData_cc359_multicoil(Dataset):
         masked_kspace = np.zeros((2, self.dim[0], self.dim[1], self.n_channels//2)) #(2, H, W, 12)
         full_kspace = np.zeros((2, self.dim[0], self.dim[1], self.n_channels//2)) #(2, H, W, 12)
         
-        # load_data
+        # load kspace data
         with h5py.File(fname, "r") as f:
             data = f["kspace"]
             if data.shape[2] == self.dim[1]:
@@ -157,7 +170,26 @@ class SliceData_cc359_multicoil(Dataset):
             else: #exceeds 170
                 idx = int((data.shape[2] - self.dim[1]) / 2)
                 kspace = data[file_slice, :, idx:-idx, :]
-     
+        
+        # load sens_map compute by BART
+        if self.use_sens_map:
+            assert fname_sens is not None, "dataloader do not have sensitivity map"
+            sens_map = np.zeros((self.dim[0], self.dim[1], self.n_channels//2, 2)) #(H, W, 12, 2)
+            with h5py.File(fname_sens, "r") as f:
+                data = np.array(f["sens_maps"])
+                if data.shape[2] == self.dim[1]:
+                    tmp = data[file_slice] #(H, W, 12)
+                else: #exceeds 170
+                    idx = int((data.shape[2] - self.dim[1]) / 2)
+                    tmp = data[file_slice, :, idx:-idx, :] #(H, W, 12)
+
+            sens_map[:,:,:,0] = tmp.real
+            sens_map[:,:,:,1] = tmp.imag
+            sens_map = torch.from_numpy(sens_map).permute(2,0,1,3).contiguous() #(12, H, W, 2)
+
+        else:
+            sens_map = -1
+ 
         # target: (H,W)
         full_kspace[0,:,:,:] = kspace[:,:,::2]
         full_kspace[1,:,:,:] = kspace[:,:,1::2]
@@ -180,12 +212,6 @@ class SliceData_cc359_multicoil(Dataset):
         masked_kspace[1,:,:,:] = temp[:,:,1::2]
         masked_kspace = torch.from_numpy(masked_kspace).permute(3,1,2,0).contiguous() #(12, H, W, 2)
 
-        # sens map
-        if self.use_sens_map:
-            esmap = EstimateSensitivityMap(gaussian_sigma=0.3)
-            sens_map = esmap(masked_kspace) #(coil, [slice], h, w, 2)
-        else:
-            sens_map = -1
 
         # zero-filled
         zim = T.ifft2(masked_kspace, shift=False) #(12, H, W, 2)
@@ -193,7 +219,6 @@ class SliceData_cc359_multicoil(Dataset):
         
         # normalize
         zim = zim/norm #(12, H, W, 2)
-        #zim = zim.reshape(-1, self.dim[0], self.dim[1]) # (24, H, W)
         target = target / norm
         masked_kspace = masked_kspace / norm
         mask = torch.unsqueeze(torch.from_numpy(mask),0) #(1, H, W, 1)

@@ -6,15 +6,15 @@ from network import getNet
 import pdb
 import warnings;warnings.filterwarnings("ignore")
 
-model = getNet('eamri_')
+model = getNet('e2evarnet_var1')
 #model = getNet('Unet_dc_fastmri')
 #model = getNet('edge')
 
-x = torch.randn(1,24,218,170)
-y = torch.randn(1,218,170,2)
-mask = torch.randn(1,218,170,1)
-sens_map = torch.randn(1,12,218,170,2)
-macs, params = profile(model, inputs=(x,y,mask,sens_map))
+x = torch.randn(1,12,218,170, 2)
+y = torch.randn(1,12, 218,170,2)
+mask = torch.randn(1,1,218,170,1)
+mask = mask.type(torch.uint8)
+macs, params = profile(model, inputs=(x,y,mask))
 
 #macs, params = profile(model, inputs=(x,))
 

@@ -77,11 +77,11 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
         
         if args.use_sens_map:
             sens_map = data['sens_map'].to(args.device, dtype=torch.float)            
+            output = model(zf, subF, mask_var, sens_map)
         else:
-            sens_map = None
-        
-        output = model(zf, subF, mask_var)
-   
+            output = model(zf, subF, mask_var)
+  
+
         #=================
         # loss
         #=================
@@ -185,8 +185,8 @@ def visualize(args, model, data_loader):
 
                 for idx in range(len(fname)):
                     select = "{}-{}".format(fname[idx].split('.')[0], slice[idx])
-                    if select not in ["e15197s3_P53760-133", "e15197s3_P53760-127", "e14531s6_P68096-205", "e14531s6_P68096-127", "e16673s13_P31744-205"]:
-                        continue
+                    #if select not in ["e15197s3_P53760-133", "e15197s3_P53760-127", "e14531s6_P68096-205", "e14531s6_P68096-127", "e16673s13_P31744-205"]:
+                        #continue
 
                 input = data['zf'].to(args.device, dtype=torch.float)
                 gt = data['gt'].to(args.device, dtype=torch.float)
@@ -198,8 +198,6 @@ def visualize(args, model, data_loader):
                 
                 if args.use_sens_map:
                     sens_map = data['sens_map'].to(args.device, dtype=torch.float)            
-                else:
-                    sens_map = None
  
                 #===========================   
                 # predict              
@@ -207,7 +205,10 @@ def visualize(args, model, data_loader):
                 if args.dev == 1:
                     outputs = input
                 else:
-                    outputs = model(input, subF, mask_var)
+                    if args.use_sens_map:
+                        outputs = model(input, subF, mask_var, sens_map)
+                    else:
+                        outputs = model(input, subF, mask_var)
                 
                 if type(outputs) == list:
                     pred = outputs[-1]
@@ -278,9 +279,8 @@ def visualize(args, model, data_loader):
                 N = len(gt_np)
                 for idx in range(N):
                     select = "{}-{}".format(fname[idx].split('.')[0], slice[idx])
-                    if select not in ["e15197s3_P53760-133", "e15197s3_P53760-127", "e14531s6_P68096-205", "e14531s6_P68096-127", "e16673s13_P31744-205"]:
-                        continue
-
+                    #if select not in ["e15197s3_P53760-133", "e15197s3_P53760-127", "e14531s6_P68096-205", "e14531s6_P68096-127", "e16673s13_P31744-205"]:
+                        #continue
 
                     plt.imsave(os.path.join(args.im_root, '{}-{}_gt.png'.format(fname[idx].split('.')[0], slice[idx])), gt_np[idx], cmap='gray' )
                     plt.imsave(os.path.join(args.im_root, '{}-{}_pred.png'.format(fname[idx].split('.')[0], slice[idx])), pred_np[idx], cmap='gray' )
@@ -301,8 +301,6 @@ def visualize(args, model, data_loader):
                                 plt.imsave(os.path.join(args.im_root, '{}-{}_pred_edge{}.png'.format(fname[idx].split('.')[0], slice[idx], kk)), edges[kk][idx], cmap='gray' )
                             else:
                                 plt.imsave(os.path.join(args.im_root, '{}-{}_gt_edge.png'.format(fname[idx].split('.')[0], slice[idx])), edges[kk][idx], cmap='gray' )
-
-                       
 
 
 
@@ -390,8 +388,8 @@ def main(args):
     # ====================================
     else:
         logger.debug("Start evaluating (without training)")
-        dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
-        logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
+        #dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
+        #logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
         if args.dev != 1:
             visualize(args , model, dev_loader)
         
@@ -475,8 +473,8 @@ if __name__ == '__main__':
 
         elif args.challenge == 'multicoil':
             if args.dataName == 'fastmri':
-                args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train/' 
-                args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val/' 
+                args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train_pd/' 
+                args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val_pd/' 
 
             elif args.dataName == 'cc359':
                 args.train_root = '/home/ET/hanhui/opendata/CC-359_multi_coil/Train/' 

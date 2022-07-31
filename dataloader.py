@@ -96,7 +96,13 @@ class SliceData_fastmri(Dataset):
     A PyTorch Dataset that provides access to MR image slices for fastmri
     """
 
-    def __init__(self, root, transform, challenge, sample_rate=1, skip_head=0):
+    def __init__(self, 
+                root, 
+                transform, 
+                challenge, 
+                sample_rate=1, 
+                skip_head=0, 
+                use_sens_map=0):
         """
         Args:
             root (pathlib.Path): Path to the dataset.
@@ -113,8 +119,7 @@ class SliceData_fastmri(Dataset):
             raise ValueError('challenge should be either "singlecoil" or "multicoil"')
 
         self.transform = transform
-        self.recons_key = 'reconstruction_esc' if challenge == 'singlecoil' \
-            else 'reconstruction_rss'
+        self.recons_key = 'reconstruction_esc' if challenge == 'singlecoil' else 'reconstruction_rss'
 
         self.examples = []
         files = list(pathlib.Path(root).iterdir())
@@ -413,6 +418,7 @@ class DataTransform_complex_fastmri_recon:
 class DataTransform_complex_fastmri_multicoil:
     """
     Data Transformer for training fastmri complex-valued image
+    multicoil
     """
     def __init__(self, mask_func, resolution, which_challenge, use_seed=True):
         """

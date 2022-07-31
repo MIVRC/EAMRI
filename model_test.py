@@ -115,7 +115,10 @@ def test_save_result_per_volume(model, data_loader, args):
                 sens_map = None
 
             if args.dev != 1:
-                output = model(input, subF, mask_val)
+                if args.use_sens_map:
+                    output = model(input, subF, mask_val, sens_map)
+                else:
+                    output = model(input, subF, mask_val)
             else:
                 output = input
 
