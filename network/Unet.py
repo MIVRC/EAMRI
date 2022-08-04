@@ -184,10 +184,11 @@ class unet_multicoil_cc359(nn.Module):
     """
     unet padding version
     """
-    def __init__(self, indim=2, dilationLayer = False, shift=False):
+    def __init__(self, indim=2, dilationLayer = False, shift=False, img_pad=True):
         
         super(unet_multicoil_cc359, self).__init__()
-
+        
+        self.img_pad = img_pad
         self.sens_net = SensitivityModel(chans = 8, num_pools = 4, shift=shift)
 
         self.block0 = nn.Sequential()
@@ -246,8 +247,9 @@ class unet_multicoil_cc359(nn.Module):
         # estimated sens map 
         sens_map = self.sens_net(y, mask)
        
-        x = self.reduce(x, sens_map) #(B, 2, H, W)
-        x0 = F.pad(x, (43,43,19,19)) #(B, 2, 256, 256) 
+        x0 = self.reduce(x, sens_map) #(B, 2, H, W)
+        if self.img_pad:
+            x0 = F.pad(x0, (43,43,19,19)) #(B, 2, 256, 256) 
 
         x1 = self.block0(x0)
         x2 = self.block1(x1)
@@ -263,7 +265,8 @@ class unet_multicoil_cc359(nn.Module):
         result = x8+x0
         
         # cropping
-        result = result[:,:,19:-19, 43:-43]
+        if self.img_pad:
+            result = result[:,:,19:-19, 43:-43]
        
         # DC
         result = self.dc(result,y,mask, sens_map)

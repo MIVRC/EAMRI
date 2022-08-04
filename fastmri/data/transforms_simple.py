@@ -203,8 +203,8 @@ def apply_mask(
             masked data: Subsampled k-space data
             mask: The generated mask
     """
-    shape = np.array(data.shape)
-    shape[:-3] = 1
+    shape = np.array(data.shape)  
+    shape[:-3] = 1 
     mask = mask_func(shape, seed)
     if padding is not None:
         mask[:, :, : padding[0]] = 0

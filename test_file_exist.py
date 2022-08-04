@@ -8,7 +8,7 @@ import pdb
 import h5py
 import shutil
 
-type1 = 'train'
+type1 = 'val'
 from_root= '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_{}_less_sensitivity/'.format(type1)
 
 to_root1= '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_{}_pd_sensitivity/'.format(type1)

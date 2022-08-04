@@ -97,7 +97,7 @@ class cnn_layer(nn.Module):
     
 class vsnet(nn.Module):
     
-    def __init__(self, alfa=0.1, beta=0.1, cascades=5, hiddim=72):
+    def __init__(self, alfa=0.1, beta=0.1, cascades=5, hiddim=72, shift=False, crop=False):
         super(vsnet, self).__init__()
         
         self.cascades = cascades 
@@ -107,27 +107,28 @@ class vsnet(nn.Module):
         
         for i in range(cascades):
             conv_blocks.append(cnn_layer(hiddim=hiddim)) 
-            dc_blocks.append(dataConsistencyTerm(noise_lvl=alfa)) 
+            dc_blocks.append(dataConsistencyTerm(shift=shift, noise_lvl=alfa)) 
             wa_blocks.append(weightedAverageTerm(para=beta)) 
         
         self.conv_blocks = nn.ModuleList(conv_blocks)
         self.dc_blocks = nn.ModuleList(dc_blocks)
         self.wa_blocks = nn.ModuleList(wa_blocks)
+        self.crop = crop
         
-        #print(self.conv_blocks)
-        #print(self.dc_blocks)
-        #print(self.wa_blocks)
- 
+
     def forward(self, x, k, m, c):
         """
         x: (B, coils, H, W, 2)
         """ 
-        
         x = T.reduce_operator(x, c, dim=1)
 
         for i in range(self.cascades):
             x_cnn = self.conv_blocks[i](x)
             Sx, SS = self.dc_blocks[i].perform(x, k, m, c)
             x = self.wa_blocks[i].perform(x + x_cnn, Sx, SS)
-        
-        return x.permute(0,3,1,2).contiguous()
+
+        x = x.permute(0,3,1,2).contiguous()
+        if self.crop: 
+            x = T.center_crop(x, (320,320))
+
+        return x

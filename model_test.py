@@ -103,7 +103,12 @@ def test_save_result_per_volume(model, data_loader, args):
             target = data['gt'].to(args.device, dtype=torch.float)
             subF = data['subF'].to(args.device, dtype=torch.float)
             mask_val = data['mask'].to(args.device, dtype=torch.uint8)
-            maxval = data['maxval'].to(args.device, dtype=torch.uint8)
+
+            if args.dataName == 'cc359':
+                maxval = data['maxval'].to(args.device, dtype=torch.uint8)
+            else:
+                maxval = data['maxval'].to(args.device, dtype=torch.float)
+
             mean = data['mean'].to(args.device, dtype=torch.float)
             std = data['std'].to(args.device, dtype=torch.float)
             fname = data['fname']

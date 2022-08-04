@@ -245,7 +245,8 @@ class eamri_0722(nn.Module):
                 num_head=4, 
                 fNums=[16,16,16,16,16],
                 num_iters=[3,3,1,3,3], 
-                n_MSRB=1): 
+                n_MSRB=1, 
+                shift=False): 
         """
         input:
             C: number of conv in RDB, default 3
@@ -257,23 +258,23 @@ class eamri_0722(nn.Module):
         super(eamri_0722, self).__init__()
        
         # sens_net 
-        self.sens_net = SensitivityModel(chans = 8, num_pools = 4)
+        self.sens_net = SensitivityModel(chans = 8, num_pools = 4, shift=shift)
 
         # image module
-        self.imHead = rdn_convBlock(inChannel=indim, midChannel=fNums[0], recursiveTime=num_iters[0])
-        self.net1 = rdn_convBlock(inChannel=indim, midChannel=fNums[1], recursiveTime=num_iters[1])
-        self.net2 = rdn_convBlock(inChannel=indim, midChannel=fNums[2], recursiveTime=num_iters[2])
-        self.net3 = rdn_convBlock(inChannel=indim, midChannel=fNums[3], recursiveTime=num_iters[3])
-        self.net4 = rdn_convBlock(inChannel=indim, midChannel=fNums[4], recursiveTime=num_iters[4])
+        self.imHead = rdn_convBlock(inChannel=indim, midChannel=fNums[0], recursiveTime=num_iters[0], shift=shift)
+        self.net1 = rdn_convBlock(inChannel=indim, midChannel=fNums[1], recursiveTime=num_iters[1], shift=shift)
+        self.net2 = rdn_convBlock(inChannel=indim, midChannel=fNums[2], recursiveTime=num_iters[2], shift=shift)
+        self.net3 = rdn_convBlock(inChannel=indim, midChannel=fNums[3], recursiveTime=num_iters[3], shift=shift)
+        self.net4 = rdn_convBlock(inChannel=indim, midChannel=fNums[4], recursiveTime=num_iters[4], shift=shift)
         
         # edge module
         self.edgeNet = Edge_Net(indim=indim, hiddim=edgeFeat, n_MSRB=n_MSRB) # simple edge block
 
         # edgeatt module
-        self.fuse1 = EAM(indim, 1, attdim, num_head, bias=False) 
-        self.fuse2 = EAM(indim, 1, attdim, num_head, bias=False) 
-        self.fuse3 = EAM(indim, 1, attdim, num_head, bias=False) 
-        self.fuse4 = EAM(indim, 1, attdim, num_head, bias=False) 
+        self.fuse1 = EAM(indim, 1, attdim, num_head, bias=False, shift=shift) 
+        self.fuse2 = EAM(indim, 1, attdim, num_head, bias=False, shift=shift) 
+        self.fuse3 = EAM(indim, 1, attdim, num_head, bias=False, shift=shift) 
+        self.fuse4 = EAM(indim, 1, attdim, num_head, bias=False, shift=shift) 
 
 
     def reduce(self, x, sens_map):

@@ -17,6 +17,7 @@ with h5py.File(fname, 'r') as data:
 
 ks = T.to_tensor(kspace) #(15, 640, 368, 2)
 ks_crop = T.fft2(T.complex_center_crop(T.ifft2(ks, shift=True), (320, 320)), shift=True) #(15, 320, 320, 2)
+#ks_crop = ks
 
 
 '''
@@ -30,7 +31,7 @@ for i in range(len(target_abs)):
 zim = T.ifft2(ks_crop)
 zim = T.complex_abs(zim) #(15, 320, 320)
 for i in range(zim.shape[0]):
-    plt.imsave('coil_{}.png'.format(i), zim[i, :,:], cmap='gray')
+    plt.imsave('coil_{}_old.png'.format(i), zim[i, :,:], cmap='gray')
 
 # zf
 #aux2 = np.fft.ifft2(kspace1, axes=(0, 1)) #(218, 170, 12) np.complex
@@ -49,5 +50,5 @@ sens_maps = bart.bart(1, "ecalib -m 1 -r 26", ks1.numpy()[None, ...])
 #plt.imsave('bart_zf.png', zim1, cmap='gray')
 temp = np.abs(sens_maps) #(H, W, coils)
 for i in range(temp.shape[-1]):
-    plt.imsave('bart_{}.png'.format(i), temp[0, :,:,i], cmap='gray')
+    plt.imsave('bart_{}_crop.png'.format(i), temp[0, :,:,i], cmap='gray')
 

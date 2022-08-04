@@ -23,6 +23,9 @@ class MaskFunc:
         self.rng = np.random.RandomState()
 
     def __call__(self, shape, fname):
+        
+        # shape (1, H, W, 2) for multicoil and (1, W, 2) for single coil
+
         if len(shape) < 3:
             raise ValueError('Shape should have 3 or more dimensions')
         
@@ -99,7 +102,6 @@ class SliceData_cc359_multicoil(Dataset):
         self.dataMode = dataMode
         self.n_channels = 24
         self.nslices = 256
-        self.dataMode = dataMode
         self.use_sens_map = use_sens_map #use true sensitivity map or not
         if use_sens_map:
             sens_root= root.rstrip('/') + '_sensitivity/'

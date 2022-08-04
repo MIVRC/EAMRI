@@ -65,11 +65,13 @@ class MaskFunc:
         Returns:
             torch.Tensor: A mask of the specified shape.
         """
+        # shape (1, H, W, 2) for multicoil and (1, W, 2) for single coil
+        
         if len(shape) < 3:
             raise ValueError('Shape should have 3 or more dimensions')
 
         self.rng.seed(seed)
-        num_cols = shape[-2]
+        num_rows, num_cols = shape[-3], shape[-2]
 
         choice = self.rng.randint(0, len(self.accelerations))
         center_fraction = self.center_fractions[choice]
@@ -81,25 +83,38 @@ class MaskFunc:
         mask = self.rng.uniform(size=num_cols) < prob
         pad = (num_cols - num_low_freqs + 1) // 2
         mask[pad:pad + num_low_freqs] = True
-
+        
         # Reshape the mask
+        '''
         mask_shape = [1 for _ in shape]
         mask_shape[-2] = num_cols
         mask = torch.from_numpy(mask.reshape(*mask_shape).astype(np.float32))
+        '''
+        shape[-1] = 1
+        mask_out = np.ones(shape) #(1, H, W, 1) or (H, W, 1)
+        if len(shape) == 4:
+            mask_prod = np.zeros((1, 1, num_cols, 1))
+            mask_prod[0,0,:,0] = mask
+        else:
+            mask_prod = np.zeros((1, num_cols, 1))
+            mask_prod[0,:,0] = mask
+        
+        mask_out = mask_out * mask_prod
 
-        return mask
+        return mask_out #(1, H, W, 1) or (H, W, 1)
 
 
 
 class SliceData_fastmri(Dataset):
     """
-    A PyTorch Dataset that provides access to MR image slices for fastmri
+    slice dataset for fastmri singlecoil and multicoil
     """
 
     def __init__(self, 
                 root, 
                 transform, 
                 challenge, 
+                dataMode='complex',
                 sample_rate=1, 
                 skip_head=0, 
                 use_sens_map=0):
@@ -119,40 +134,70 @@ class SliceData_fastmri(Dataset):
             raise ValueError('challenge should be either "singlecoil" or "multicoil"')
 
         self.transform = transform
+        self.use_sens_map = use_sens_map
         self.recons_key = 'reconstruction_esc' if challenge == 'singlecoil' else 'reconstruction_rss'
+        self.dataMode = dataMode
 
         self.examples = []
         files = list(pathlib.Path(root).iterdir())
+
+        if use_sens_map:
+            sens_root= root.rstrip('/') + '_sensitivity_no_crop/'
+            if not os.path.exists(sens_root):
+                assert True, "do not exists sensitivity map"
+
         if sample_rate < 1:
             random.shuffle(files)
             num_files = round(len(files) * sample_rate)
             files = files[:num_files]
 
         for fname in sorted(files):
+            name1 = fname.name
             kspace = h5py.File(fname, 'r')['kspace'] #(num_slices, height, width)
             num_slices = kspace.shape[0]
             if skip_head:
                 begin = num_slices // 2 - 8
             else:
                 begin = 0
-            self.examples += [(fname, slice) for slice in range(begin, num_slices)]
+
+            if use_sens_map:
+                fname_sens = os.path.join(sens_root, name1)
+                self.examples += [(fname,fname_sens,slice) for slice in range(begin, num_slices)]
+            else:
+                self.examples += [(fname,None,slice) for slice in range(begin, num_slices)]
 
     def __len__(self):
         return len(self.examples)
 
     def __getitem__(self, i):
-        fname, slice = self.examples[i]
+        fname, fname_sens, slice = self.examples[i]
+        if 'edge' in self.dataMode:
+            compute_edge = 1
+        else:
+            compute_edge = 0
+        
+        # read in kspace data
         with h5py.File(fname, 'r') as data:
             kspace = data['kspace'][slice]
             target = data[self.recons_key][slice] if self.recons_key in data else None
-            return self.transform(kspace, target, data.attrs, fname.name, slice)
+            maxval = data.attrs['max'].astype(np.float32)
+            
+            # sensitivity map
+            if self.use_sens_map:
+                assert fname_sens is not None, "Do not have root for the sensitivity map!"
+                with h5py.File(fname_sens, 'r') as data1:
+                    sens_map = np.array(data1['sens_maps'][slice]) #(H, W, coils)
+            else:
+                sens_map = None
+
+            return self.transform(kspace, target, maxval, fname.name, slice, sens_map, compute_edge=compute_edge)
 
 
 
 
 class SliceData_cc359(Dataset):
     """
-    A PyTorch Dataset that provides access to MR image slices for brainMRI
+    A PyTorch Dataset that provides access to MR image slices for cc359 single coil
     """
 
     def __init__(self, root, transform, sample_rate=1, skip_head=0):
@@ -222,7 +267,7 @@ class DataTransform_real_fastmri:
         self.which_challenge = which_challenge
         self.use_seed = use_seed
 
-    def __call__(self, kspace, target, attrs, fname, slice):
+    def __call__(self, kspace, target, attrs, fname, slice, sens_map=None, compute_edge=False):
         """
         Args:
             kspace (numpy.array): Input k-space of shape (num_coils, rows, cols, 2) for multi-coil
@@ -270,7 +315,7 @@ class DataTransform_real_fastmri:
 
 class DataTransform_complex_fastmri:
     """
-    Data Transformer for training fastmri complex-valued image
+    Data Transformer for fastmri single coil
     """
 
     def __init__(self, mask_func, resolution, which_challenge, use_seed=True):
@@ -291,7 +336,7 @@ class DataTransform_complex_fastmri:
         self.which_challenge = which_challenge
         self.use_seed = use_seed
 
-    def __call__(self, kspace, target, attrs, fname, slice):
+    def __call__(self, kspace, target, attrs, fname, slice, sens_map=None, compute_edge=False):
         """
         Args:
             kspace (numpy.array): Input k-space of shape (num_coils, rows, cols, 2) for multi-coil
@@ -340,84 +385,10 @@ class DataTransform_complex_fastmri:
 
 
 
-class DataTransform_complex_fastmri_recon:
+
+class DataTransform_complex_fastmri_multicoil_vsnet:
     """
-    adapt from reconformer
-    Data Transformer for training fastmri complex-valued image
-    """
-
-    def __init__(self, mask_func, resolution, which_challenge, use_seed=True):
-        """
-        Args:
-            mask_func (common.subsample.MaskFunc): A function that can create a mask of
-                appropriate shape.
-            resolution (int): Resolution of the image.
-            which_challenge (str): Either "singlecoil" or "multicoil" denoting the dataset.
-            use_seed (bool): If true, this class computes a pseudo random number generator seed
-                from the filename. This ensures that the same mask is used for all the slices of
-                a given volume every time.
-        """
-        if which_challenge not in ('singlecoil', 'multicoil'):
-            raise ValueError(f'Challenge should either be "singlecoil" or "multicoil"')
-        self.mask_func = mask_func
-        self.resolution = resolution
-        self.which_challenge = which_challenge
-        self.use_seed = use_seed
-
-    def __call__(self, kspace, target, attrs, fname, slice):
-        """
-        Args:
-            kspace (numpy.array): Input k-space of shape (num_coils, rows, cols, 2) for multi-coil
-                data or (rows, cols, 2) for single coil data.
-            target (numpy.array): Target image
-            attrs (dict): Acquisition related information stored in the HDF5 object.
-            fname (str): File name
-            slice (int): Serial number of the slice.
-        Returns:
-            (tuple): tuple containing:
-                image (torch.Tensor): Zero-filled input image.
-                target (torch.Tensor): Target image converted to a torch Tensor.
-                mean (float): Mean value used for normalization.
-                std (float): Standard deviation value used for normalization.
-                norm (float): L2 norm of the entire volume.
-        """
-        seed = None if not self.use_seed else tuple(map(ord, fname))
-
-        # full kspace
-        full_kspace = transforms.to_tensor(kspace)
-
-        # target
-        target = transforms.to_tensor(target)
-        
-        # crop kspace
-        kspace_crop = transforms.fft2(transforms.complex_center_crop(transforms.ifft2(full_kspace), (self.resolution, self.resolution)))
-       
-        # scaling
-        masked_kspace, mask = transforms.apply_mask(kspace_crop, self.mask_func, seed)
-
-        # zero-filled
-        zim = transforms.ifft2(masked_kspace)
-
-        zim_abs = transforms.complex_abs(zim)
-        _, mean, std = transforms.normalize_instance(zim_abs, eps=1e-11)
-
-        # scaling
-        zim /= mean 
-        target = target/mean
-        masked_kspace /= mean
-      
-        # reshape
-        zim = zim.permute(2,0,1)
-
-        return zim, target, masked_kspace, mask, mean, mean, attrs['max'].astype(np.float32), fname, slice
-
-
-
-
-
-class DataTransform_complex_fastmri_multicoil:
-    """
-    Data Transformer for training fastmri complex-valued image
+    Data Transformer for fasmri multicoil
     multicoil
     """
     def __init__(self, mask_func, resolution, which_challenge, use_seed=True):
@@ -431,20 +402,20 @@ class DataTransform_complex_fastmri_multicoil:
                 from the filename. This ensures that the same mask is used for all the slices of
                 a given volume every time.
         """
-        if which_challenge not in ('singlecoil', 'multicoil'):
-            raise ValueError(f'Challenge should either be "singlecoil" or "multicoil"')
+        if which_challenge not in ('multicoil'):
+            raise ValueError(f'Challenge should "multicoil"')
         self.mask_func = mask_func
         self.resolution = resolution
         self.which_challenge = which_challenge
         self.use_seed = use_seed
 
-    def __call__(self, kspace, target, attrs, fname, slice):
+    def __call__(self, kspace, target, maxval, fname, slice, sens_map=None, compute_edge=False):
         """
         Args:
             kspace (numpy.array): Input k-space of shape (num_coils, rows, cols, 2) for multi-coil
                 data or (rows, cols, 2) for single coil data.
             target (numpy.array): Target image
-            attrs (dict): Acquisition related information stored in the HDF5 object.
+            maxval: max val of the volume
             fname (str): File name
             slice (int): Serial number of the slice.
         Returns:
@@ -457,32 +428,160 @@ class DataTransform_complex_fastmri_multicoil:
         """
         seed = None if not self.use_seed else tuple(map(ord, fname))
 
-        # full kspace
+        # full kspace (coils, H, W, 2)
         full_kspace = transforms.to_tensor(kspace) #(num_coils, rows, cols, 2)
+        shape1 = full_kspace.shape 
 
-        # target
+        # target (H, W)
         target = transforms.to_tensor(target) #(rows, cols)
-        
-        # crop kspace
-        kspace_crop = transforms.fft2(transforms.complex_center_crop(transforms.ifft2(full_kspace), (self.resolution, self.resolution)))
+       
+        # use sens_map (H, W, coils, 2)
+        if sens_map is not None:
+            sens_map_out = np.zeros((shape1[1], shape1[2], shape1[0], 2))
+            sens_map_out[:,:,:,0] = sens_map.real
+            sens_map_out[:,:,:,1] = sens_map.imag
+            sens_map_out = torch.from_numpy(sens_map_out).permute(2,0,1,3).contiguous() #(coils, H, W, 2)
+        else:
+            sens_map_out = -1
+
+        # kspace crop (coils, 320, 320, 2)
+        #kspace_crop = transforms.fft2(transforms.complex_center_crop(transforms.ifft2(full_kspace, shift=True), (self.resolution, self.resolution)), shift=True)
+        kspace_crop = full_kspace
        
         # scaling
         kspace_crop *= 1e6
-        masked_kspace, mask = transforms.apply_mask(kspace_crop, self.mask_func, seed) #(num_coils, rows, cols, 2), (1,1,cols,1)
+        masked_kspace, mask = transforms.apply_mask(kspace_crop, self.mask_func, seed) #(num_coils, rows, cols, 2), (1,rows,cols,1)
 
         # zero-filled
-        zim = transforms.ifft2(masked_kspace) #(num_coils, rows, cols, 2)
-
-        zim_abs = transforms.complex_abs(zim)
-        _, mean, std = transforms.normalize_instance(zim_abs, eps=1e-11)
+        zim = transforms.ifft2(masked_kspace, shift=True) #(num_coils, rows, cols, 2)
 
         # scaling
         target = target * 1e6
-      
-        # stacking
-        zim = zim.reshape(-1,self.resolution,self.resolution) #(num_coils, rows, cols)
 
-        return zim, target, masked_kspace, mask, mean, std, attrs['max'].astype(np.float32), fname, slice
+        # true edge
+        if compute_edge:
+            target_normal = (255*(target - target.min()))/(target.max().item() - target.min().item())
+            gt_edge = torch.from_numpy(Get_sobel(target_normal.numpy())) # (H, W)
+            gt_edge = gt_edge / gt_edge.max() # normalize
+        else:
+            gt_edge = -1
+
+        output = {
+                'zf':zim, 
+                'gt':target, 
+                'subF':masked_kspace, 
+                'mask':mask, 
+                'mean': 0, 
+                'std': 1, 
+                'fname':fname, 
+                'slice_id': slice, 
+                'maxval': maxval,
+                'gt_edge':gt_edge,
+                'sens_map': sens_map_out 
+                }
+
+        return output
+
+
+
+class DataTransform_complex_fastmri_multicoil:
+    """
+    Data Transformer for fasmri multicoil
+    multicoil
+    """
+    def __init__(self, mask_func, resolution, which_challenge, use_seed=True):
+        """
+        Args:
+            mask_func (common.subsample.MaskFunc): A function that can create a mask of
+                appropriate shape.
+            resolution (int): Resolution of the image.
+            which_challenge (str): Either "singlecoil" or "multicoil" denoting the dataset.
+            use_seed (bool): If true, this class computes a pseudo random number generator seed
+                from the filename. This ensures that the same mask is used for all the slices of
+                a given volume every time.
+        """
+        if which_challenge not in ('multicoil'):
+            raise ValueError(f'Challenge should "multicoil"')
+        self.mask_func = mask_func
+        self.resolution = resolution
+        self.which_challenge = which_challenge
+        self.use_seed = use_seed
+
+    def __call__(self, kspace, target, maxval, fname, slice, sens_map=None, compute_edge=False):
+        """
+        Args:
+            kspace (numpy.array): Input k-space of shape (num_coils, rows, cols, 2) for multi-coil
+                data or (rows, cols, 2) for single coil data.
+            target (numpy.array): Target image
+            maxval: max val of the volume
+            fname (str): File name
+            slice (int): Serial number of the slice.
+        Returns:
+            (tuple): tuple containing:
+                image (torch.Tensor): Zero-filled input image.
+                target (torch.Tensor): Target image converted to a torch Tensor.
+                mean (float): Mean value used for normalization.
+                std (float): Standard deviation value used for normalization.
+                norm (float): L2 norm of the entire volume.
+        """
+        seed = None if not self.use_seed else tuple(map(ord, fname))
+
+        # full kspace (coils, H, W, 2)
+        full_kspace = transforms.to_tensor(kspace) #(num_coils, rows, cols, 2)
+        COIL = full_kspace.shape[0]
+
+        # target (H, W)
+        target = transforms.to_tensor(target) #(rows, cols)
+       
+        # use sens_map (H, W, coils, 2)
+        if sens_map is not None:
+            sens_map_out = np.zeros((320, 320, COIL, 2))
+            sens_map_out[:,:,:,0] = sens_map.real
+            sens_map_out[:,:,:,1] = sens_map.imag
+            sens_map_out = torch.from_numpy(sens_map_out).permute(2,0,1,3).contiguous() #(coils, H, W, 2)
+        else:
+            sens_map_out = -1
+
+        # kspace crop (coils, 320, 320, 2)
+        kspace_crop = transforms.fft2(transforms.complex_center_crop(transforms.ifft2(full_kspace, shift=True), (self.resolution, self.resolution)), shift=True)
+       
+        # scaling
+        kspace_crop *= 1e6
+        masked_kspace, mask = transforms.apply_mask(kspace_crop, self.mask_func, seed) #(num_coils, rows, cols, 2), (1,rows,cols,1)
+
+        # zero-filled
+        zim = transforms.ifft2(masked_kspace, shift=True) #(num_coils, rows, cols, 2)
+
+        # scaling
+        target = target * 1e6
+
+        # true edge
+        if compute_edge:
+            target_normal = (255*(target - target.min()))/(target.max().item() - target.min().item())
+            gt_edge = torch.from_numpy(Get_sobel(target_normal.numpy())) # (H, W)
+            gt_edge = gt_edge / gt_edge.max() # normalize
+        else:
+            gt_edge = -1
+
+        output = {
+                'zf':zim, 
+                'gt':target, 
+                'subF':masked_kspace, 
+                'mask':mask, 
+                'mean': 0, 
+                'std': 1, 
+                'fname':fname, 
+                'slice_id': slice, 
+                'maxval': maxval,
+                'gt_edge':gt_edge,
+                'sens_map': sens_map_out 
+                }
+
+        return output
+
+
+
+
 
 
 
@@ -511,7 +610,7 @@ class DataTransform_complex_fastmri_edge:
         self.which_challenge = which_challenge
         self.use_seed = use_seed
 
-    def __call__(self, kspace, target, attrs, fname, slice):
+    def __call__(self, kspace, target, attrs, fname, slice, sens_map=None):
         """
         Args:
             kspace (numpy.array): Input k-space of shape (num_coils, rows, cols, 2) for multi-coil
@@ -771,14 +870,23 @@ def create_datasets(
                     dt = DataTransform_complex_fastmri_edge
                 else:
                     raise NotImplementedError("Only support real/complex/complex_edge dataMode in fastmri dataloader")
-            elif challenge == 'multicoil':
-                dt = DataTransform_complex_fastmri_multicoil
 
+            # ===========================================
+            # multicoil 
+            # ===========================================
+
+            elif challenge == 'multicoil':
+                #dt = DataTransform_complex_fastmri_multicoil
+                dt = DataTransform_complex_fastmri_multicoil_vsnet
+            
+            
             train_data = SliceData_fastmri(
                 root=train_root, 
                 transform=dt(train_mask, resolution, challenge),
                 sample_rate=sample_rate,
                 challenge=challenge,
+                dataMode=dataMode,
+                use_sens_map=use_sens_map,
                 skip_head=1
             )
             dev_data = SliceData_fastmri(
@@ -786,6 +894,8 @@ def create_datasets(
                 transform=dt(dev_mask, resolution, challenge, use_seed=True),
                 sample_rate=sample_rate,
                 challenge=challenge,
+                dataMode=dataMode,
+                use_sens_map=use_sens_map,
                 skip_head=0
             )
         

@@ -1360,12 +1360,10 @@ class SensitivityModel(nn.Module):
                 masked_kspace, pad, pad + num_low_freqs
             )
 
-
         # convert to image space
         # images: [96, 1, 218, 179, 2]
         # batches: 8
         images, batches = self.chans_to_batch_dim(T.ifft2(masked_kspace, shift=self.shift))
-        
         
         # estimate sensitivities
         return self.divide_root_sum_of_squares(self.batch_chans_to_chan_dim(self.norm_unet(images), batches))
