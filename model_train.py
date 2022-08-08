@@ -188,6 +188,7 @@ def visualize(args, model, data_loader):
                     #if select not in ["e15197s3_P53760-133", "e15197s3_P53760-127", "e14531s6_P68096-205", "e14531s6_P68096-127", "e16673s13_P31744-205"]:
                         #continue
 
+
                 input = data['zf'].to(args.device, dtype=torch.float)
                 gt = data['gt'].to(args.device, dtype=torch.float)
                 subF = data['subF'].to(args.device, dtype=torch.float)
@@ -233,7 +234,7 @@ def visualize(args, model, data_loader):
                 # normalize back data
                 #===========================   
 
-                if args.dataName == 'fastmri':
+                if 'fastmri' in args.dataName:
                     if 'complex' in args.dataMode: 
                         input = dataFormat(input) /1e6
                         pred = dataFormat(pred) / 1e6
@@ -281,6 +282,7 @@ def visualize(args, model, data_loader):
                     select = "{}-{}".format(fname[idx].split('.')[0], slice[idx])
                     #if select not in ["e15197s3_P53760-133", "e15197s3_P53760-127", "e14531s6_P68096-205", "e14531s6_P68096-127", "e16673s13_P31744-205"]:
                         #continue
+
 
                     plt.imsave(os.path.join(args.im_root, '{}-{}_gt.png'.format(fname[idx].split('.')[0], slice[idx])), gt_np[idx], cmap='gray' )
                     plt.imsave(os.path.join(args.im_root, '{}-{}_pred.png'.format(fname[idx].split('.')[0], slice[idx])), pred_np[idx], cmap='gray' )
@@ -387,7 +389,7 @@ def main(args):
     # evaluating mode
     # ====================================
     else:
-        logger.debug("Start evaluating (without training)")
+        logger.debug("Start evaluating {} (without training), valid_root: {}".format(args.netType, args.valid_root))
         dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
         logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
         if args.dev != 1:
@@ -409,7 +411,7 @@ def create_arg_parser_fastmri():
     parser.add_argument('--netType', type=str) 
     parser.add_argument('--exp-dir', type=pathlib.Path, default='./results/', help='Path to store the results')
     parser.add_argument('--num-epochs', type=int, default=80, help='Number of training epochs')
-    parser.add_argument('--jump', type=int, default=10, help='how many jump to plot images')
+    parser.add_argument('--jump', type=int, default=1, help='how many jump to plot images')
     parser.add_argument('--sample_rate', type=float, help="Sample rate", default=1.)
     parser.add_argument('--lr', type=float, default=0.0005, help='Learning rate')
     parser.add_argument('--lr-step-size', type=int, default=20, help='Period of learning rate decay')
@@ -472,9 +474,12 @@ if __name__ == '__main__':
                 args.valid_root = '/home/ET/hanhui/opendata/CC-359_single_coil/Val/' 
 
         elif args.challenge == 'multicoil':
-            if args.dataName == 'fastmri':
+            if args.dataName == 'fastmri_pd':
                 args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train_pd/' 
                 args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val_pd/' 
+            elif args.dataName == 'fastmri_pdfs':
+                args.train_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train_pdfs/' 
+                args.valid_root = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val_pdfs/' 
 
             elif args.dataName == 'cc359':
                 args.train_root = '/home/ET/hanhui/opendata/CC-359_multi_coil/Train/' 

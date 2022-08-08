@@ -143,6 +143,7 @@ class SliceData_fastmri(Dataset):
 
         if use_sens_map:
             sens_root= root.rstrip('/') + '_sensitivity_no_crop/'
+            #sens_root= root.rstrip('/') + '_sensitivity/'
             if not os.path.exists(sens_root):
                 assert True, "do not exists sensitivity map"
 
@@ -840,7 +841,7 @@ def create_datasets(
         sample_rate(float):
 
     """
-    assert dataName in ['cardiac','fastmri', 'cc359'], "Only support cardiac/fastmri/cc359 dataset"
+    assert dataName in ['cardiac','fastmri_pd', 'fastmri_pdfs','cc359'], "Only support cardiac/fastmri/cc359 dataset"
 
     if dataName == 'cardiac':
 
@@ -855,7 +856,7 @@ def create_datasets(
         # ===========================================
         # fastmri 
         # ===========================================
-        if dataName == 'fastmri':
+        if 'fastmri' in dataName:
 
             # ===========================================
             # singlecoil
@@ -874,11 +875,11 @@ def create_datasets(
             # ===========================================
             # multicoil 
             # ===========================================
-
-            elif challenge == 'multicoil':
-                #dt = DataTransform_complex_fastmri_multicoil
+            elif challenge == 'multicoil' and use_sens_map: # special treatment for vsnet
                 dt = DataTransform_complex_fastmri_multicoil_vsnet
             
+            elif challenge == 'multicoil' and not use_sens_map:
+                dt = DataTransform_complex_fastmri_multicoil
             
             train_data = SliceData_fastmri(
                 root=train_root, 

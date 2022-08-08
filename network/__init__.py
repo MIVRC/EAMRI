@@ -350,7 +350,7 @@ def getNet(netType):
         return eamri_0722_var1(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3)
 
     # =========================================================
-    elif (nettype == 'eamri_0722_sc'):
+    elif (netType == 'eamri_0722_sc'):
         return eamri_0722_sc(indim=2, edgeFeat=12, attdim=8, num_head=4, num_iters=[3,3,3,3,3], fNums=[32,32,32,32,32], nMSRB=1)
 
 
