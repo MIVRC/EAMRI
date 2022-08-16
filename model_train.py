@@ -16,6 +16,7 @@ import torch
 from torch.nn import functional as F
 from network import getNet, getLoss, getOptimizer, Get_gradient
 from util import paramNumber 
+from fastmri.data import transforms_simple as T
 from PIL import Image
 import matplotlib.pyplot as plt
 from dataloader import getDataloader, dataFormat, handle_output 
@@ -237,6 +238,8 @@ def visualize(args, model, data_loader):
                 if 'fastmri' in args.dataName:
                     if 'complex' in args.dataMode: 
                         input = dataFormat(input) /1e6
+                        if args.use_sens_map:
+                            input = T.center_crop(input, (320, 320))
                         pred = dataFormat(pred) / 1e6
                         gt = gt/1e6
 
@@ -488,6 +491,8 @@ if __name__ == '__main__':
 
     if args.accer == 4:
         args.center_fractions = 0.08
+    elif args.accer == 6:
+        args.center_fractions = 0.06
     elif args.accer == 8:
         args.center_fractions = 0.04
 

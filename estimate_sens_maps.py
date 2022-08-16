@@ -96,7 +96,8 @@ def main_fastmri_nocrop(file1):
     #file_list = sorted(glob.glob(input_dir + '/*.h5'))
     #for file in tqdm(file_list):
 
-    output_dir = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train_pdfs_sensitivity_no_crop/' 
+
+    output_dir = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val_pdfs_sensitivity_no_crop/' 
     basename = os.path.basename(file1) 
 
     print("processing file {}".format(basename))
@@ -127,8 +128,8 @@ if __name__ == '__main__':
     main_fastmri(input_dir, output_dir)
     '''
 
-    input_dir = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train_pdfs/' 
-    output_dir = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_train_pdfs_sensitivity_no_crop/' 
+    input_dir = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val_pdfs/' 
+    output_dir = '/home/ET/hanhui/opendata/fastmri_knee_multicoil_dataset/multicoil_val_pdfs_sensitivity_no_crop/' 
     if not os.path.exists(output_dir):
         os.makedirs(output_dir)
 

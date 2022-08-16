@@ -2,11 +2,14 @@ import os
 import sys
 from thop import profile
 import torch
+import time
 from network import getNet
 import pdb
 import warnings;warnings.filterwarnings("ignore")
 
-model = getNet('e2evarnet_var1')
+#model = getNet('recurvarnet')
+model = getNet('eamri_0722')
+#model = getNet('recurvarnet')
 #model = getNet('Unet_dc_fastmri')
 #model = getNet('edge')
 
@@ -21,3 +24,9 @@ macs, params = profile(model, inputs=(x,y,mask))
 print("model flops {}G".format(macs/1e9))
 print("model param {}K".format(params/1e3))
 
+t1 = time.time()
+for _ in range(10):
+    outs = model(x, y , mask)
+
+t2 = time.time()
+print("elasped time for 10 iters {}".format((t2-t1)/10))

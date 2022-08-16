@@ -260,8 +260,6 @@ def getNet(netType):
 
 
 
-
-
     # =========================================================
     elif (netType == 'eamri_0714_cc359'):
         return eamri_0714(indim=2, edgeFeat=12, attdim=48, n_DAMs=[1,1,1,1], growthRates=[16,16,16,16], num_head=4, layers=[3,5,5,5], num_iters=[1,1,1,1], fNums=[16,16,16,16], n_MSRB=1, isFastmri=False, isMulticoil=False)
@@ -341,10 +339,9 @@ def getNet(netType):
 
     # =========================================
     # final model for eamri
-    elif (netType == 'eamri_0722'):
+    elif (netType == 'eamri_0722'): # cc359
         return eamri_0722(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=False)
-
-    elif (netType == 'eamri_0722_fastmri'):
+    elif (netType == 'eamri_0722_fastmri'): # fastmri
         return eamri_0722(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=True)
     elif (netType == 'eamri_0722_var1'): #ablation model without edge
         return eamri_0722_var1(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3)
@@ -373,7 +370,6 @@ def getNet(netType):
     # =========================================================
     elif (netType == 'e2evarnet'):
         return VarNet(num_cascades=5, sens_chans=4, sens_pools=4, chans=8, pools=4, mask_center=True, shift=False)
-    
     elif (netType == 'e2evarnet_fastmri'):
         return VarNet(num_cascades=5, sens_chans=4, sens_pools=4, chans=8, pools=4, mask_center=True, shift=True)
     # =========================================================
