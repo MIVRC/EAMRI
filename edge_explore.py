@@ -70,8 +70,31 @@ def Get_sobel(gt, scale, delta):
     grad = cv2.addWeighted(abs_grad_x, 0.5, abs_grad_y, 0.5, 0)
     return grad
 
+def Get_canny(gt):
+    
+    gt_normal = (255*(gt - gt.min()))/(gt.max().item() - gt.min().item())
 
-def median_filter_ex():
+    blurred_img = cv2.blur(gt_normal,ksize=(5,5)).astype(np.uint8)
+    med_val = np.median(gt_normal) 
+    lower = int(max(0 ,0.5*med_val))
+    upper = int(min(255,1.5*med_val))
+    edges = cv2.Canny(image=blurred_img, threshold1=lower,threshold2=upper) 
+
+    return edges
+
+
+
+def Get_prewitt(gt):
+
+    gt = (255*(gt - gt.min()))/(gt.max().item() - gt.min().item())
+    kernelx = np.array([[1,1,1],[0,0,0],[-1,-1,-1]])
+    kernely = np.array([[-1,0,1],[-1,0,1],[-1,0,1]])
+    img_prewittx = cv2.filter2D(gt, -1, kernelx)
+    img_prewitty = cv2.filter2D(gt, -1, kernely)
+    return np.sqrt(img_prewittx**2 + img_prewitty**2)
+
+
+def main():
 
     # patient id and frame name 
     fid = 1002382
@@ -90,16 +113,20 @@ def median_filter_ex():
         target = data['reconstruction_esc'][frame] #(320,320)
 
     # apply meadian filter
-    target_med = ndimage.median_filter(target, 3) 
+    #target_med = ndimage.median_filter(target, 3) 
 
-    gt_sobel = Get_sobel(target,scale, delta)
-    gt_sobel_med = Get_sobel(target_med, scale, delta)
-
+    #gt_sobel = Get_sobel(target,scale, delta)
+    #gt_sobel_med = Get_sobel(target_med, scale, delta)
+    th1 = 75
+    th2 = 100
+    #gt_canny = Get_canny(target*1e6, th1, th2)
+    gt_prew = Get_prewitt(target * 16)
 
     plot_and_save(target, os.path.join(root,'frame{}_gt.png'.format(frame)))
-    plot_and_save(gt_sobel, os.path.join(root, 'frame{}_gt_sobel.png'.format(frame)))
-    plot_and_save(target_med, os.path.join(root,'frame{}_gt_med.png'.format(frame)))
-    plot_and_save(gt_sobel_med, os.path.join(root, 'frame{}_gt_sobel_med.png'.format(frame)))
+    #plot_and_save(gt_canny, os.path.join(root, 'frame{}_gt_canny_{}_{}.png'.format(frame, th1, th2)))
+    plot_and_save(gt_prew, os.path.join(root, 'frame{}_gt_prew.png'.format(frame)))
+    #plot_and_save(target_med, os.path.join(root,'frame{}_gt_med.png'.format(frame)))
+    #plot_and_save(gt_sobel_med, os.path.join(root, 'frame{}_gt_sobel_med.png'.format(frame)))
 
 
 
@@ -181,7 +208,7 @@ if __name__ == '__main__':
 
     #fname = '/home/ET/hanhui/opendata/fastmri_knee_singlecoil_dataset/singlecoil_train/file1001475.h5' 
 
-    meadian_filter_susan_op_ex()
+    #meadian_filter_susan_op_ex()
 
-
+    main()
 

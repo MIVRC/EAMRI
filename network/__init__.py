@@ -60,6 +60,8 @@ from .eamri_0721_var1 import eamri_0721_var1
 from .eamri_0721_var2 import eamri_0721_var2
 from .eamri_0722 import eamri_0722
 from .eamri_0722_var1 import eamri_0722_var1
+from .eamri_0722_var2 import eamri_0722_var2
+from .eamri_0722_var4 import eamri_0722_var4
 
 from .e2evarnet import VarNet
 from .kikinet import KIKINet 
@@ -345,6 +347,14 @@ def getNet(netType):
         return eamri_0722(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=True)
     elif (netType == 'eamri_0722_var1'): #ablation model without edge
         return eamri_0722_var1(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3)
+    elif (netType == 'eamri_0722_var2'): # cc359
+        return eamri_0722_var2(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=False)
+    elif (netType == 'eamri_0722_var4'): # cc359
+        return eamri_0722_var4(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=False)
+    elif (netType == 'eamri_0722_var5'): # cc359
+        return eamri_0722(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=1, shift=False)
+    elif (netType == 'eamri_0722_var6'): # cc359
+        return eamri_0722(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=5, shift=False)
 
     # =========================================================
     elif (netType == 'eamri_0722_sc'):

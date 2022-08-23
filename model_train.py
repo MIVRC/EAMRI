@@ -99,7 +99,7 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
                 if 'edge' in args.dataMode:
                     if ii < len(output)-1:
                         assert len(ele.shape)==3, 'invalid edge output'
-                        loss += F.l1_loss(ele, gt_edge)
+                        loss += args.edge_weight * F.l1_loss(ele, gt_edge)
                     else:
                         loss += F.l1_loss(ele, gt)
                 # not edge model
@@ -366,7 +366,7 @@ def main(args):
     # =======================================
     # load dataloader 
     # =======================================
-    train_loader, dev_loader = getDataloader(args.dataName, args.dataMode, args.batchSize, [args.center_fractions], [args.accer], args.resolution, args.train_root, args.valid_root, args.sample_rate, args.challenge, args.use_sens_map)
+    train_loader, dev_loader = getDataloader(args.dataName, args.dataMode, args.batchSize, [args.center_fractions], [args.accer], args.resolution, args.train_root, args.valid_root, args.sample_rate, args.challenge, args.use_sens_map, args.edge_type)
 
 
     # =======================================
@@ -435,6 +435,8 @@ def create_arg_parser_fastmri():
                         help='Which device to train on. Set to "cuda" to use the GPU')
     parser.add_argument('--server', type=str, default='cluster', help='Which device to train on.')
     parser.add_argument('--use_sens_map', type=int, default=0, help='Whether to calculate sensitivity map.')
+    parser.add_argument('--edge_weight', type=float, default=1.0, help='weight of the edge loss.')
+    parser.add_argument('--edge_type', type=str, default='sobel', help='edge type')
 
     return parser.parse_args()
 

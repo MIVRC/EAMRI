@@ -825,7 +825,8 @@ def create_datasets(
                     resolution, 
                     sample_rate,
                     challenge='singlecoil',
-                    use_sens_map=False
+                    use_sens_map=False,
+                    edge_type='sobel'
                     ):
 
     """
@@ -940,7 +941,8 @@ def create_datasets(
                     shuffle=True,
                     is_train=True,
                     dataMode=dataMode,
-                    use_sens_map=use_sens_map
+                    use_sens_map=use_sens_map,
+                    edge_type=edge_type
                 )
                 dev_data = SliceData_cc359_multicoil(
                     root=valid_root,
@@ -950,7 +952,8 @@ def create_datasets(
                     shuffle=False,
                     is_train=False,
                     dataMode=dataMode,
-                    use_sens_map=use_sens_map
+                    use_sens_map=use_sens_map,
+                    edge_type=edge_type
                 )
 
 
@@ -994,10 +997,11 @@ def getDataloader(
                     sample_rate=1, 
                     challenge='singlecoil',
                     use_sens_map=False,
+                    edge_type='sobel'
                 ): 
 
     # create slice dataset
-    dev_data, train_data = create_datasets(dataName, dataMode, train_root, valid_root, center_fractions, accelerations, resolution, sample_rate, challenge, use_sens_map)
+    dev_data, train_data = create_datasets(dataName, dataMode, train_root, valid_root, center_fractions, accelerations, resolution, sample_rate, challenge, use_sens_map, edge_type)
 
     # ================================
     # train

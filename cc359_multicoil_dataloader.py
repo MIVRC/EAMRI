@@ -3,7 +3,7 @@ import h5py
 import glob
 import numpy as np
 from torch.utils.data import Dataset
-from util import Get_sobel 
+from util import Get_sobel, Get_canny, Get_prewitt
 from fastmri.data import transforms_simple as T
 from fastmri.data.transforms_simple import EstimateSensitivityMap 
 from typing import List, Tuple
@@ -68,6 +68,7 @@ class SliceData_cc359_multicoil(Dataset):
         is_train:bool,
         dataMode:str, 
         use_sens_map:bool=False,
+        edge_type:str='Sobel',
     ):
         """Constructor for DataGenerator.
         :param root: root to store the data
@@ -108,7 +109,8 @@ class SliceData_cc359_multicoil(Dataset):
             self.list_IDs_sens = glob.glob((sens_root+"/*.h5").__str__())
         else:
             self.list_IDs_sens = None
-
+    
+        self.edge_type = edge_type
         self.is_train = is_train
         self.shuffle = shuffle
         self.nsamples = len(self.list_IDs) * (self.nslices - self.crop[0] - self.crop[1])
@@ -202,9 +204,20 @@ class SliceData_cc359_multicoil(Dataset):
         
         # gt edge
         if 'edge' in self.dataMode:
-            target_normal = (255*(target - target.min()))/(target.max().item() - target.min().item())
-            gt_edge = torch.from_numpy(Get_sobel(target_normal.numpy())) # (H, W)
-            gt_edge = gt_edge / gt_edge.max() # normalize
+            if self.edge_type == 'sobel':
+                target_normal = (255*(target - target.min()))/(target.max().item() - target.min().item())
+                gt_edge = torch.from_numpy(Get_sobel(target_normal.numpy())) # (H, W)
+                gt_edge = gt_edge / gt_edge.max() # normalize
+            elif self.edge_type == 'canny':
+                target_normal = (255*(target - target.min()))/(target.max().item() - target.min().item())
+                gt_edge = torch.from_numpy(Get_canny(target_normal.numpy().astype(np.uint8))) # (H, W)
+                gt_edge = gt_edge / gt_edge.max() # normalize
+
+            elif self.edge_type == 'prewitt':
+                target_normal = (255*(target - target.min()))/(target.max().item() - target.min().item())
+                gt_edge = torch.from_numpy(Get_prewitt(target_normal.numpy())) # (H, W)
+                gt_edge = gt_edge / gt_edge.max() # normalize
+
         else:
             gt_edge = -1
 

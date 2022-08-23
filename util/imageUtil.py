@@ -23,6 +23,29 @@ def Get_sobel(target):
     return grad
 
 
+def Get_canny(target):
+    """
+    gaussian blur 
+    """    
+    blurred_img = cv2.blur(target,ksize=(5,5)).astype(np.uint8)
+    med_val = np.median(target) 
+    lower = int(max(0 ,0.5*med_val))
+    upper = int(min(255,1.5*med_val))
+    edges = cv2.Canny(image=blurred_img, threshold1=lower,threshold2=upper) 
+
+    return edges
+
+
+def Get_prewitt(gt):
+
+    kernelx = np.array([[1,1,1],[0,0,0],[-1,-1,-1]])
+    kernely = np.array([[-1,0,1],[-1,0,1],[-1,0,1]])
+    img_prewittx = cv2.filter2D(gt, -1, kernelx)
+    img_prewitty = cv2.filter2D(gt, -1, kernely)
+
+    return np.sqrt(img_prewittx**2 + img_prewitty**2)
+
+
 
 def complex_abs(data):
     """
