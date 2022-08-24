@@ -1,7 +1,7 @@
-"sample code for fastmri training and evaluating"
+"-sample code for fastmri training and evaluating"
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "1"
+os.environ["CUDA_VISIBLE_DEVICES"] = "6"
 import sys
 import time
 import cv2
@@ -19,6 +19,7 @@ from util import paramNumber
 from fastmri.data import transforms_simple as T
 from PIL import Image
 import matplotlib.pyplot as plt
+from fastmri.data import transforms_simple as T
 from dataloader import getDataloader, dataFormat, handle_output 
 from model_test import test_save_result_per_slice, test_save_result_per_volume 
 import warnings
@@ -239,7 +240,7 @@ def visualize(args, model, data_loader):
                     if 'complex' in args.dataMode: 
                         input = dataFormat(input) /1e6
                         if args.use_sens_map:
-                            input = T.center_crop(input, (320, 320))
+                            input = T.center_crop(input, (320,320)) 
                         pred = dataFormat(pred) / 1e6
                         gt = gt/1e6
 
@@ -393,8 +394,8 @@ def main(args):
     # ====================================
     else:
         logger.debug("Start evaluating {} (without training), valid_root: {}".format(args.netType, args.valid_root))
-        dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
-        logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
+        #dev_loss, dev_rmse, dev_psnr, dev_ssim ,dev_time = test_save_result_per_volume(model, dev_loader, args)
+        #logger.debug(f'Epoch = [{start_epoch:4d}] DevLoss = {dev_loss:.4g} DevRMSE = {dev_rmse:.4g} DevPSNR = {dev_psnr:.4g} DevSSIM = {dev_ssim:.4g} DevTime = {dev_time:.4f}s')
         if args.dev != 1:
             visualize(args , model, dev_loader)
         
