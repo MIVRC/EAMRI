@@ -168,8 +168,6 @@ def getNet(netType):
     elif (netType == 'edgeFormer'):
         return edgeFormer_0413(in_channels=2, out_channels=2, num_ch=(36,48,48,96), down_scales=(2,1,1,1.5), img_size=320, num_heads=(6,6,6,6), depths=(3,3,9,3), window_sizes=(8,8,8,8), mlp_ratio=2., resi_connection='1conv', use_checkpoint=(False,False, False, False))
 
-
-
     elif (netType == 'convTranNet_0601'):
         return convTranNet_0601(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
 
@@ -372,16 +370,32 @@ def getNet(netType):
         return net_0705_var2(img_size=256, indim=2, convDim=16, expand=2, edgeFeat=8, attdim=32, DAM_denseLayer=1, num_head=4, n_MSRB=2, n_DAM=1, isFastmri=False)
 
     # =========================================================
+    # recurvarnet
+
     elif (netType == 'recurvarnet'):
         return RecurrentVarNet(in_channels= 2, num_steps= 3, recurrent_hidden_channels= 96, recurrent_num_layers= 4, no_parameter_sharing= True, learned_initializer= True, initializer_initialization= 'sense', initializer_channels= (32, 32, 64, 64), initializer_dilations=(1, 1, 2, 4), initializer_multiscale= 3, normalized= False, shift= False)
 
+    elif (netType == 'recurvarnet_big'):
+        return RecurrentVarNet(in_channels= 2, num_steps= 10, recurrent_hidden_channels= 64, recurrent_num_layers= 4, no_parameter_sharing= True, learned_initializer= True, initializer_initialization= 'sense', initializer_channels= (32, 32, 64, 64), initializer_dilations=(1, 1, 2, 4), initializer_multiscale= 3, normalized= False, shift= False)
+    elif (netType == 'recurvarnet_var1'):
+        return RecurrentVarNet(in_channels= 2, num_steps= 8, recurrent_hidden_channels= 48, recurrent_num_layers= 4, no_parameter_sharing= True, learned_initializer= True, initializer_initialization= 'sense', initializer_channels= (16, 16, 48, 48), initializer_dilations=(1, 1, 2, 4), initializer_multiscale= 3, normalized= False, shift= False)
     elif (netType == 'recurvarnet_fastmri'):
         return RecurrentVarNet(in_channels= 2, num_steps= 3, recurrent_hidden_channels= 96, recurrent_num_layers= 4, no_parameter_sharing= True, learned_initializer= True, initializer_initialization= 'sense', initializer_channels= (32, 32, 64, 64), initializer_dilations=(1, 1, 2, 4), initializer_multiscale= 3, normalized= False, shift= True)
+
     # =========================================================
+    # e2evarnet
+
     elif (netType == 'e2evarnet'):
         return VarNet(num_cascades=5, sens_chans=4, sens_pools=4, chans=8, pools=4, mask_center=True, shift=False)
     elif (netType == 'e2evarnet_fastmri'):
         return VarNet(num_cascades=5, sens_chans=4, sens_pools=4, chans=8, pools=4, mask_center=True, shift=True)
+    elif (netType == 'e2evarnet_big'):
+        return VarNet(num_cascades=12, sens_chans=4, sens_pools=4, chans=18, pools=4, mask_center=True, shift=False)
+
+    elif (netType == 'e2evarnet_var1'):
+        return VarNet(num_cascades=8, sens_chans=4, sens_pools=4, chans=8, pools=4, mask_center=True, shift=False)
+
+
     # =========================================================
     elif (netType == 'kikinet'):
         return KIKINet(image_model_architecture= "MWCNN", kspace_model_architecture= "UNET", num_iter=5,image_mwcnn_hidden_channels = 16, image_mwcnn_num_scales = 4, image_mwcnn_bias = True, image_mwcnn_batchnorm = False, image_unet_num_filters = 8, image_unet_num_pool_layers = 4, image_unet_dropout_probability = 0.0, kspace_conv_hidden_channels = 16, kspace_conv_n_convs = 4, kspace_conv_batchnorm = False, kspace_didn_hidden_channels = 64, kspace_didn_num_dubs = 6, kspace_didn_num_convs_recon = 9, kspace_unet_num_filters = 8, kspace_unet_num_pool_layers = 4, kspace_unet_dropout_probability = 0.0, shift = False)
@@ -391,6 +405,8 @@ def getNet(netType):
         return vsnet(alfa=0.1, beta=0.1, cascades=5, hiddim=96, shift=False)
     elif (netType == 'vsnet_fastmri'):
         return vsnet(alfa=0.1, beta=0.1, cascades=5, hiddim=96, shift=True, crop=True)
+    elif (netType == 'vsnet_var1'):
+        return vsnet(alfa=0.1, beta=0.1, cascades=8, hiddim=72, shift=False)
     else:
         assert False,"Wrong net type"
 
