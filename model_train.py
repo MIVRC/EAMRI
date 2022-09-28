@@ -1,7 +1,7 @@
 "-sample code for fastmri training and evaluating"
 
 import os
-os.environ["CUDA_VISIBLE_DEVICES"] = "6"
+os.environ["CUDA_VISIBLE_DEVICES"] = "1"
 import sys
 import time
 import cv2
@@ -94,30 +94,56 @@ def train_epoch(args, epoch, model, data_loader, optimizer, logger):
         else: # list of outputs
             nn = len(output)
             loss = 0.
+            edge_loss = 0.
+            im_loss = 0.
             for ii, ele in enumerate(output):
                 ele= dataFormat(ele)
                 # edge model
                 if 'edge' in args.dataMode:
                     if ii < len(output)-1:
                         assert len(ele.shape)==3, 'invalid edge output'
-                        loss += args.edge_weight * F.l1_loss(ele, gt_edge)
+                        edge_loss += F.l1_loss(ele, gt_edge)
                     else:
-                        loss += F.l1_loss(ele, gt)
+                        im_loss += F.l1_loss(ele, gt)
+
                 # not edge model
                 else:
                     loss += F.l1_loss(ele, gt)
 
+            if 'edge' in args.dataMode:
+                loss = args.edge_weight * edge_loss + im_loss
+
         loss.backward()
         optimizer.step()
-        avg_loss = (0.99 * avg_loss + 0.01 * loss.item() if iter > 0 else loss.item())/nn
+
+        # edge model : avg_loss = weight * avg_edge_loss + avg_im_loss
+        if 'edge' in args.dataMode:
+            avg_edge_loss = 0.99 * avg_edge_loss + 0.01 * edge_loss.item() if iter > 0 else edge_loss.item()
+            avg_im_loss = 0.99 * avg_im_loss + 0.01 * im_loss.item() if iter > 0 else im_loss.item()
+            avg_loss = 0.99 * avg_loss + 0.01 * loss.item() if iter > 0 else loss.item()
+        
+        # not edge model
+        else:
+            avg_loss = 0.99 * avg_loss + 0.01 * loss.item() if iter > 0 else loss.item()
         
         if iter % args.report_interval == 0:
-            logger.debug(
-                f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
-                f'Iter = [{iter:4d}/{len(data_loader):4d}] '
-                f'Loss = {loss.item():.4g} Avg Loss = {avg_loss:.4g} '
-                f'Time = {time.perf_counter() - start_iter:.4f}s',
-            )
+            if 'edge' in args.dataMode:
+                logger.debug(
+                    f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
+                    f'Iter = [{iter:4d}/{len(data_loader):4d}] '
+                    f'Batch Loss = {loss.item():.4g} '
+                    f'Batch Edge Loss = {edge_loss.item():.4g} ' 
+                    f'Batch Image Loss = {im_loss.item():.4g} '
+                    f'|| Avg Batch Loss = {avg_loss:.4g} Avg edge Loss = {avg_edge_loss:.4g} Avg image Loss = {avg_im_loss:.4g}'
+                    f'Time = {time.perf_counter() - start_iter:.4f}s',
+                )
+            else:
+                logger.debug(
+                    f'Epoch = [{epoch:3d}/{args.num_epochs:3d}] '
+                    f'Iter = [{iter:4d}/{len(data_loader):4d}] '
+                    f'Batch Loss = {loss.item():.4g} Avg Batch Loss = {avg_loss:.4g} '
+                    f'Time = {time.perf_counter() - start_iter:.4f}s',
+                )
         start_iter = time.perf_counter()
         
     return avg_loss, time.perf_counter() - start_epoch
@@ -166,7 +192,7 @@ def build_optim(args, params):
     return optimizer
 
 
-
+@torch.no_grad()
 def visualize(args, model, data_loader):
     """
     visualize  

@@ -63,6 +63,9 @@ from .eamri_0722_var1 import eamri_0722_var1
 from .eamri_0722_var2 import eamri_0722_var2
 from .eamri_0722_var4 import eamri_0722_var4
 from .eamri_0722_var3 import eamri_0722_var3
+from .eamri_0722_n1 import eamri_0722_n1
+from .eamri_0828 import eamri_0828
+from .eamri_0829 import eamri_0829
 
 from .e2evarnet import VarNet
 from .kikinet import KIKINet 
@@ -340,6 +343,20 @@ def getNet(netType):
 
     # =========================================
     # final model for eamri
+    # eamri
+    elif (netType == 'eamri_0722_n1'): # cc359
+        return eamri_0722_n1(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,2,2,2,2,1], fNums=[48,96,96,96,96,96], n_MSRB=3, shift=False)
+
+    elif (netType == 'eamri_0828'): # cc359
+        return eamri_0828(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,1,1,1,1,1], fNums=[48,96,96,96,96,96], n_MSRB=3, shift=False)
+    elif (netType == 'eamri_0829'): # cc359
+        return eamri_0829(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,1,1,1,1,1], fNums=[48,96,96,96,96,96], n_MSRB=3, shift=False)
+    elif (netType == 'eamri_0829_ex3'): # cc359
+        return eamri_0829(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,1,1,1,1,1,1,1,1], fNums=[48,96,96,96,96,96,96,96,96], n_MSRB=3, shift=False)
+    elif (netType == 'eamri_0829_ex4'): # cc359
+        return eamri_0829(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,1,1,1,1,1,1,1,1,1,1,1,1], fNums=[48,96,96,96,96,96,96,96,96,96,96,96,96], n_MSRB=3, shift=False)
+    
+    
     elif (netType == 'eamri_0722'): # cc359
         return eamri_0722(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=False)
     elif (netType == 'eamri_0722_fastmri'): # fastmri
@@ -400,6 +417,8 @@ def getNet(netType):
     elif (netType == 'e2evarnet_var1'):
         return VarNet(num_cascades=8, sens_chans=4, sens_pools=4, chans=8, pools=4, mask_center=True, shift=False)
 
+    elif (netType == 'e2evarnet_var1_fastmri'):
+        return VarNet(num_cascades=8, sens_chans=4, sens_pools=4, chans=8, pools=4, mask_center=True, shift=True)
 
     # =========================================================
     elif (netType == 'kikinet'):
