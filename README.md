@@ -21,3 +21,7 @@ From left to right: (a) Ground Truth, (b) Zero-Filled, (c) U-Net, (d) E2EVarNet,
 ## Qualitative results on fastmri PD dataset with AF = 6. 
 From left to right: (a) Ground Truth, (b) Zero-Filled, (c) U-Net, (d) E2EVarNet, (e) VS-Net, (f) RecurrentVarNet, and (g) EAMRI (Ours).
 ![image](https://github.com/MIVRC/EAMRI/blob/master/images/fastmri_pd_mc_6x.png)
+
+## Qualitative results on fastmri PDFS dataset with AF = 6. 
+From left to right: (a) Ground Truth, (b) Zero-Filled, (c) U-Net, (d) E2EVarNet, (e) VS-Net, (f) RecurrentVarNet, and (g) EAMRI (Ours).
+![image](https://github.com/MIVRC/EAMRI/blob/master/images/fastmri_pdfs_mc_6x.png)
