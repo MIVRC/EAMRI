@@ -8,4 +8,4 @@ others/
 *.pyc
 slurm*
 run_job.sh
-
+*.py
