@@ -13,60 +13,12 @@ from .SEN_MRI import WAS
 from .zero_filled_model import ZF
 from .md_recon import MRIReconstruction as mdr
 
-from .net_0621 import net_0621
-#from .net_0621_var1 import net_0621_var1
-#from .net_0621_var2 import net_0621_var2
-#from .net_0621_var3 import net_0621_var3
-#from .net_0621_var4 import net_0621_var4
-
-from .net_0622 import net_0622
-from .net_0622_var1 import net_0622_var1
-from .net_0626 import net_0626
-
-from .net_0702 import net_0702
-from .net_0702_var1 import net_0702_var1
-from .net_0702_var2 import net_0702_var2
-from .net_0702_var3 import net_0702_var3 
-from .net_0702_var4 import net_0702_var4
-from .net_0702_var5 import net_0702_var5
-from .net_0706 import net_0706, Edge_Net
-from .net_0705 import net_0705
-from .net_0705_var2 import net_0705_var2
-from .net_0705_var3 import net_0705_var3
-
-from .net_0707 import net_0707
-from .net_0707_var1 import net_0707_var1
-#from .net_0707_var2 import net_0707_var2
-from .net_0707_var3 import net_0707_var3
-
 from .recurrentvarnet import RecurrentVarNet
-from .eamri_0714 import eamri_0714
-from .eamri_0714_debug import eamri_0714_debug
-from .eamri_0715 import eamri_0715
-from .eamri_0715_var1 import eamri_0715_var1
-from .eamri_0715_var2 import eamri_0715_var2
-from .eamri_0716 import eamri_0716
-from .eamri_0716_var1 import eamri_0716_var1
-from .eamri_0716_var2 import eamri_0716_var2
-from .eamri_0718 import eamri_0718
-from .eamri_0719 import eamri_0719
-from .eamri_0719_var1 import eamri_0719_var1
-from .eamri_0719_var2 import eamri_0719_var2
-from .eamri_0719_debug import eamri_0719_debug
-from .eamri_0719_debug3 import eamri_0719_debug3
-from .eamri_0719_debug4 import eamri_0719_debug4
-from .eamri_0721 import eamri_0721
-from .eamri_0721_var1 import eamri_0721_var1
-from .eamri_0721_var2 import eamri_0721_var2
-from .eamri_0722 import eamri_0722
+from .EAMRI import EAMRI
 from .eamri_0722_var1 import eamri_0722_var1
 from .eamri_0722_var2 import eamri_0722_var2
 from .eamri_0722_var4 import eamri_0722_var4
 from .eamri_0722_var3 import eamri_0722_var3
-from .eamri_0722_n1 import eamri_0722_n1
-from .eamri_0828 import eamri_0828
-from .eamri_0829 import eamri_0829
-
 from .e2evarnet import VarNet
 from .kikinet import KIKINet 
 from .vsnet import vsnet
@@ -157,210 +109,13 @@ def getNet(netType):
     elif (netType == 'mdr_fastmri'):
         return mdr(isFastmri=True)
 
-    #===========cascaded_edgeNet============
-    elif (netType == 'casEdgeNet'):
-        return casEdgeNet(2,32)
-    elif (netType == 'net_0426'):
-        return net_0426(2,64)
-
-    #===========Recon============
-    elif (netType == 'recon'):
-        return ReconFormer(in_channels=2, out_channels=2, num_ch=(96,48,24), num_iter=5, down_scales=(2,1,1.5), img_size=320, num_heads=(6,6,6), depths=(2,1,1), window_sizes=(8,8,8), mlp_ratio=2., resi_connection='1conv', use_checkpoint=(False,False, True, True, False, False))
-    elif (netType == 'casFormer'):
-        return casFormer(in_channels=2, out_channels=2, num_ch=(96,48,48,24,24), down_scales=(2,1,1,1,1.5), img_size=320, num_heads=(6,6,6,6,6), depths=(2,2,1,1,1), window_sizes=(8,8,8,8,8), mlp_ratio=2., resi_connection='1conv', use_checkpoint=(False,False, True, True, False, False))
-    
-    elif (netType == 'edgeFormer'):
-        return edgeFormer_0413(in_channels=2, out_channels=2, num_ch=(36,48,48,96), down_scales=(2,1,1,1.5), img_size=320, num_heads=(6,6,6,6), depths=(3,3,9,3), window_sizes=(8,8,8,8), mlp_ratio=2., resi_connection='1conv', use_checkpoint=(False,False, False, False))
-
-    elif (netType == 'convTranNet_0601'):
-        return convTranNet_0601(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-    elif (netType == 'convTranNet_0601_fastmri'):
-        return convTranNet_0601(img_size=320, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=True)
-
-
-    elif (netType == 'net_0601_var1'):
-        return net_0601_var1(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-    elif (netType == 'convTranNet_0601_debug'):
-        return convTranNet_0601_debug(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-
-    elif (netType == 'convTranNet_0601_debug2'):
-        return convTranNet_0601_debug2(img_size=256, indim=2, outdim=12, num_head=4, n_DAM=3, isFastmri=False)
-
-    
-    # =========================================================
-    elif (netType == 'net_0617'):
-        return net_0617(img_size=256, indim=2, edgeFeat=16, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0617_var1'):
-        return net_0617_var1(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0617_var2'):
-        return net_0617_var2(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-
-
-    # =========================================================
-    elif (netType == 'net_0621'):
-        return net_0621(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0621_var1'):
-        return net_0621_var1(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0621_var2'):
-        return net_0621_var2(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0621_var3'):
-        return net_0621_var3(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0621_var4'):
-        return net_0621_var4(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-
-
-    # =========================================================
-    elif (netType == 'net_0622'):
-        return net_0622(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=1, isFastmri=False)
-
-    elif (netType == 'net_0622_var1'):
-        return net_0622_var1(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=1, isFastmri=False)
-
-    # =========================================================
-    elif (netType == 'net_0626'):
-        return net_0626(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-
-
-    # =========================================================
-    elif (netType == 'net_0702'):
-        return net_0702(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0702_var1'):
-        return net_0702_var1(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0702_var2'):
-        return net_0702_var2(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0702_var3'):
-        return net_0702_var3(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0702_var4'):
-        return net_0702_var4(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0702_var5'):
-        return net_0702_var5(img_size=256, indim=2, edgeFeat=32, outdim=32, num_head=4, n_DAM=3, isFastmri=False)
-   
-    #==================
-    # test
-    elif (netType == 'net_0706'):
-        return net_0706(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,3,1], num_head=4, layers=[4,4,4,4], isFastmri=False)
-    elif (netType == 'net_0706_var1'):
-        return net_0706(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[2,2,6,2], num_head=4, layers=[4,4,4,4], isFastmri=False)
-    elif (netType == 'net_0706_var2'):
-        return net_0706(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[2,2,6,2], num_head=4, layers=[3,3,4,3], isFastmri=False)
-
-    # =========================================================
-    elif (netType == 'net_0707'):
-        return net_0707(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,3,1], num_head=4, layers=[3,3,4,3], num_iters=[3,3,1,3], isFastmri=False)
-    elif (netType == 'net_0707_var1'):
-        return net_0707_var1(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=False)
-    elif (netType == 'net_0707_var2'):
-        return net_0707_var2(img_size=256, indim=2, edgeFeat=12, attdim=16, n_DAMs=[1,5,5,5], num_head=4, fNums=[64,64,64,64], num_iters=[1,1,1,1], isFastmri=False)
-
-    # =========================================================
-    elif (netType == 'net_0707_var3'):
-        return net_0707_var3(img_size=256, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=False)
-    elif (netType == 'net_0707_var3_fastmri'):
-        return net_0707_var3(img_size=320, indim=2, edgeFeat=12, attdim=8, n_DAMs=[1,1,1,1], num_head=4, layers=[3,4,4,4], num_iters=[1,5,5,5], isFastmri=True)
-
-
-
-
-    # =========================================================
-    elif (netType == 'eamri_0714_cc359'):
-        return eamri_0714(indim=2, edgeFeat=12, attdim=48, n_DAMs=[1,1,1,1], growthRates=[16,16,16,16], num_head=4, layers=[3,5,5,5], num_iters=[1,1,1,1], fNums=[16,16,16,16], n_MSRB=1, isFastmri=False, isMulticoil=False)
-
-    elif (netType == 'eamri_0714_cc359_multicoil'):
-        return eamri_0714(indim=24, edgeFeat=32, attdim=48, n_DAMs=[1,1,1,1], growthRates=[32,32,32,32], num_head=4, layers=[3,5,5,5], num_iters=[1,5,5,5], fNums=[32,32,32,32], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_debug'):
-        return eamri_0714_debug(indim=24, edgeFeat=32, attdim=48, n_DAMs=[1,1,1,1], growthRates=[32,32,32,32], num_head=4, layers=[3,5,5,5], num_iters=[1,5,5,5], fNums=[32,32,32,32], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-
-    elif (netType == 'eamri_0715'):
-        return eamri_0715(indim=24, edgeFeat=32, attdim=48, n_DAMs=[1,1,1,1], growthRates=[32,32,32,32], num_head=4, layers=[3,5,5,5], num_iters=[1,1,1,1], fNums=[32,32,32,32], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0715_var1'):
-        return eamri_0715_var1(indim=24, edgeFeat=32, attdim=48, n_DAMs=[1,1,1,1], growthRates=[32,32,32,32], num_head=4, layers=[3,5,5,5], num_iters=[1,1,1,1], fNums=[32,32,32,32], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0715_var2'):
-        return eamri_0715_var2(indim=24, edgeFeat=32, attdim=48, n_DAMs=[1,1,1,1], growthRates=[32,32,32,32], num_head=4, layers=[3,5,5,5], num_iters=[1,1,1,1], fNums=[32,32,32,32], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0715_var4'):
-        return eamri_0715_var1(indim=24, edgeFeat=32, attdim=48, n_DAMs=[1,3,3,3], growthRates=[32,32,32,32], num_head=4, layers=[3,5,5,5], num_iters=[1,5,5,5], fNums=[32,32,32,32], n_MSRB=1, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0716'):
-        return eamri_0716(indim=24, edgeFeat=32, attdim=48, n_DAMs=[1,1,1,1], growthRates=[32,32,32,32], num_head=4, layers=[3,5,5,5], num_iters=[1,5,5,5], fNums=[32,32,32,32], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0716_var1'):
-        return eamri_0716_var1(indim=24, edgeFeat=32, attdim=48, n_DAMs=[1,1,1,1], growthRates=[32,32,32,32], num_head=4, layers=[3,5,5,5], num_iters=[1,5,5,5], fNums=[72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0716_var2'):
-        return eamri_0716_var2(indim=24, edgeFeat=32, attdim=64, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=8, layers=[3,5,5,5,5], num_iters=[1,3,4,4,4], fNums=[48,72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0716_var3'):
-        return eamri_0716_var1(indim=24, edgeFeat=48, attdim=48, n_DAMs=[1,1,1,1], growthRates=[32,32,32,32], num_head=4, layers=[3,5,5,5], num_iters=[3,5,5,5], fNums=[72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0716_var4'):
-        return eamri_0716_var2(indim=24, edgeFeat=32, attdim=64, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=8, layers=[3,5,5,5,5], num_iters=[3,3,3,3,3], fNums=[96,96,96,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-    
-    elif (netType == 'eamri_0718'):
-        return eamri_0718(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,3,4,4,4], fNums=[48,72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-    elif (netType == 'eamri_0718_var1'):
-        return eamri_0718(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,5,5,5,5], fNums=[48,96,96,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0719'):
-        return eamri_0719(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,3,4,4,4], fNums=[48,72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0719_var1'):
-        return eamri_0719_var1(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,5,5,5,4], fNums=[48,96,96,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0719_var2'):
-        return eamri_0719_var2(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,5,5,5,4], fNums=[48,96,96,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0719_debug'):
-        return eamri_0719_debug(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,3,4,4,4], fNums=[48,72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-   
-    elif (netType == 'eamri_0719_debug2'):
-        return eamri_0719_debug(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,3,4,4,4], fNums=[48,72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-
-    elif (netType == 'eamri_0719_debug3'):
-        return eamri_0719_debug3(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,1,1,1,1], fNums=[48,72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0719_debug4'):
-        return eamri_0719_debug4(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,3,4,4,4], fNums=[48,72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0719_debug5'):
-        return eamri_0719_debug(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,1,1,1,1], fNums=[48,72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0721'):
-        return eamri_0721(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,1,1,1,1], fNums=[48,72,72,96,96], n_MSRB=2, isFastmri=False, isMulticoil=True)
- 
-    elif (netType == 'eamri_0721_var1'):
-        return eamri_0721_var1(indim=24, edgeFeat=32, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,1,1,1,1], fNums=[48,72,96,96,96], n_MSRB=3, isFastmri=False, isMulticoil=True)
-
-    elif (netType == 'eamri_0721_var2'):
-        return eamri_0721_var2(indim=2, edgeFeat=24, attdim=32, n_DAMs=[1,1,1,1,1], growthRates=[32,32,32,32,32], num_head=4, layers=[3,5,5,5,5], num_iters=[1,1,1,1,1], fNums=[48,72,96,96,96], n_MSRB=3, isFastmri=False, isMulticoil=True)
-
     # =========================================
     # final model for eamri
     # eamri
-    elif (netType == 'eamri_0722_n1'): # cc359
-        return eamri_0722_n1(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,2,2,2,2,1], fNums=[48,96,96,96,96,96], n_MSRB=3, shift=False)
-
-    elif (netType == 'eamri_0828'): # cc359
-        return eamri_0828(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,1,1,1,1,1], fNums=[48,96,96,96,96,96], n_MSRB=3, shift=False)
-    elif (netType == 'eamri_0829'): # cc359
-        return eamri_0829(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,1,1,1,1,1], fNums=[48,96,96,96,96,96], n_MSRB=3, shift=False)
-    elif (netType == 'eamri_0829_ex3'): # cc359
-        return eamri_0829(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,1,1,1,1,1,1,1,1], fNums=[48,96,96,96,96,96,96,96,96], n_MSRB=3, shift=False)
-    elif (netType == 'eamri_0829_ex4'): # cc359
-        return eamri_0829(indim=2, edgeFeat=24, attdim=48, num_head=4, num_iters=[1,1,1,1,1,1,1,1,1,1,1,1,1], fNums=[48,96,96,96,96,96,96,96,96,96,96,96,96], n_MSRB=3, shift=False)
-    
-    
-    elif (netType == 'eamri_0722'): # cc359
-        return eamri_0722(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=False)
-    elif (netType == 'eamri_0722_fastmri'): # fastmri
-        return eamri_0722(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=True)
+    elif (netType == 'EAMRI'): # cc359
+        return EAMRI(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=False)
+    elif (netType == 'EAMRI_fastmri'): # fastmri
+        return EAMRI(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=True)
     elif (netType == 'eamri_0722_var1'): #ablation model without edge
         return eamri_0722_var1(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3)
     elif (netType == 'eamri_0722_var2'): # cc359
@@ -375,21 +130,8 @@ def getNet(netType):
     elif (netType == 'eamri_0722_var3'):
         return eamri_0722_var3(indim=2, edgeFeat=24, attdim=32, num_head=4, num_iters=[1,3,3,3,3], fNums=[48,96,96,96,96], n_MSRB=3, shift=False)
 
-
-    # =========================================================
     elif (netType == 'eamri_0722_sc'):
         return eamri_0722_sc(indim=2, edgeFeat=12, attdim=8, num_head=4, num_iters=[3,3,3,3,3], fNums=[32,32,32,32,32], nMSRB=1)
-
-
-    # =========================================================
-    elif (netType == 'net_0705'):
-        return net_0705(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=8, DAM_denseLayer=5, num_head=4, n_MSRB=2, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0705_var1'):
-        return net_0705(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=8, DAM_denseLayer=3, num_head=4, n_MSRB=1, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0705_var3'):
-        return net_0705_var3(img_size=256, indim=2, convDim=16, edgeFeat=8, attdim=32, growthRate=16, DAM_denseLayer=3, num_head=4, n_MSRB=1, n_DAM=3, isFastmri=False)
-    elif (netType == 'net_0705_var2'):
-        return net_0705_var2(img_size=256, indim=2, convDim=16, expand=2, edgeFeat=8, attdim=32, DAM_denseLayer=1, num_head=4, n_MSRB=2, n_DAM=1, isFastmri=False)
 
     # =========================================================
     # recurvarnet

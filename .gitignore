@@ -1,7 +1,6 @@
 result/
 sample_code/
 config/
-images/
 logs/
 *.swp
 others/
@@ -9,4 +8,5 @@ others/
 *.pyc
 slurm*
 run_job.sh
+*.py
 
