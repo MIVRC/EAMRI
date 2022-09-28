@@ -1,0 +1,11 @@
+result/
+sample_code/
+config/
+logs/
+*.swp
+others/
+*.pkl
+*.pyc
+slurm*
+run_job.sh
+*.py
