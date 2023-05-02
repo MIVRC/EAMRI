@@ -1,5 +1,5 @@
 # EAMRI
-This is the official code hub for the EAMRI
+This is the official code hub for the EAMRI: Fast MRI Reconstruction via Edge Attention
 
 # Requirements
 - Python==3.6.13
