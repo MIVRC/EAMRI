@@ -12,6 +12,9 @@ This is the official code hub for the EAMRI
 - scikit-image == 0.15.0
 - h5py
 
+# Training
+Please refer to the example "run_job.sh"
+
 
 # Supplementary Images
 ## Qualitative results on Calgary dataset with AF = 6. 

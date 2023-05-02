@@ -7,5 +7,3 @@ others/
 *.pkl
 *.pyc
 slurm*
-run_job.sh
-*.py
